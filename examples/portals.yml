@@ -1,0 +1,30 @@
+job_boards:
+  - name: Russian-language job boards
+    provider: ru-market
+    ru_market:
+      source: all
+      primary_source_order: [hh, habr-career, geekjob]
+      max_pages: 3
+      sources:
+        hh:
+          enabled: true
+          mode: api
+          max_pages: 2
+          host: hh.ru
+          locale: RU
+          area: ""
+          schedule: remote
+          queries:
+            - Python backend
+        habr_career:
+          enabled: true
+          mode: html
+          max_pages: 3
+          categories:
+            - programmist_python
+            - backend_razrabotchik
+          remote: true
+        geekjob:
+          enabled: true
+          mode: html
+          max_pages: 5

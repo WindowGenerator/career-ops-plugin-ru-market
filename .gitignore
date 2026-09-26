@@ -1,0 +1,4 @@
+node_modules/
+coverage/
+health.json
+.DS_Store
