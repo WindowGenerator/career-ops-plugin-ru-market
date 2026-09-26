@@ -21,8 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci --ignore-scripts
-        working-directory: career-ops
+      # buildCtx uses only Node builtins; health needs no core npm install.
       - name: Check one page per source
         working-directory: plugin
         run: node scripts/health.mjs --career-ops ../career-ops > health.json
