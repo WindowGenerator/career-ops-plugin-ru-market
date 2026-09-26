@@ -1,0 +1,37 @@
+name: Live source health
+on:
+  schedule:
+    - cron: '23 7 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+      - uses: actions/checkout@v4
+        with:
+          repository: santifer/career-ops
+          ref: 92dea48b209a9791b884e2a19ee111d0e2f098f0
+          path: career-ops
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+        working-directory: career-ops
+      - name: Check one page per source
+        working-directory: plugin
+        run: node scripts/health.mjs --career-ops ../career-ops > health.json
+      - name: Report degradation
+        if: failure()
+        run: echo '::error::Source health degraded. Inspect the JSON artifact; no vacancy payloads are retained.'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-health
+          path: plugin/health.json
+          retention-days: 14

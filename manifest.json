@@ -1,0 +1,13 @@
+{
+  "id": "ru-market",
+  "name": "ru-market",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "description": "Discover public Russian-language vacancies across HH, Habr Career and GeekJob.",
+  "hooks": ["provider"],
+  "requiredEnv": [],
+  "allowedHosts": ["api.hh.ru", "career.habr.com", "geekjob.ru"],
+  "skill": "skill.md",
+  "humanInTheLoop": true,
+  "homepage": "https://github.com/WindowGenerator/career-ops-plugin-ru-market"
+}

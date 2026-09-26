@@ -1,0 +1,7 @@
+{
+  "errors": [
+    {
+      "type": "captcha_required"
+    }
+  ]
+}
