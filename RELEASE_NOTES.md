@@ -1,3 +1,13 @@
+## 0.2.0
+
+HH API принимает `HH_ACCESS_TOKEN` зарегистрированного приложения из окружения.
+HTML-поиск HH не добавлен: условия сайта запрещают автоматизированный парсинг.
+После первого отказа доступа HH остальные его запросы прекращаются. Provider
+возвращает статус каждого источника для отчёта о частичном результате. Причина
+наблюдавшегося 403 остаётся неизвестной; токен не гарантирует доступ.
+
+## 0.1.0
+
 Initial ru-market provider for career-ops: HH public API, Habr Career and
 GeekJob public HTML, aggregate deduplication with alternative URLs, independent
 host queues, bounded retries and partial results. No runtime dependencies,

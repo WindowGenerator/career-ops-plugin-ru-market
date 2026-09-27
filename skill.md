@@ -18,6 +18,8 @@ board is HH. Notes identify the actual board (`source: hh` etc.), while core
 records `ru-market-api`. Possible cross-listings are suggestions, not merges.
 
 HH uses its public API even in `auto` mode. HTML fallback is unavailable.
+Set `HH_ACCESS_TOKEN` in the local career-ops `.env` to use a registered HH
+application token; a token does not guarantee access after HTTP 403.
 Habr Career and GeekJob support `html` and `auto`. An access error must not trigger
 CAPTCHA bypass, account access or requests to employer sites.
 

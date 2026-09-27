@@ -29,7 +29,7 @@ async function main() {
   // Reuse the existing guarded context; health must obey the same egress rules.
   const { buildCtx } = await import(pathToFileURL(resolve(core, 'plugins/_engine.mjs')).href);
   const manifest = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
-  const ctx = buildCtx({ ...manifest, optionalEnv: [] });
+  const ctx = buildCtx(manifest);
   const result = await checkHealth({ ...ctx, log: () => {} });
   console.log(JSON.stringify(result));
   process.exitCode = result.ok ? 0 : 1;

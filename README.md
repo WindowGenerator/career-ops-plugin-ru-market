@@ -110,7 +110,16 @@ Core записывает системный источник `ru-market-api`. �
 ## Сеть и ошибки
 
 HTTP выполняется только через `ctx.fetchJson`/`ctx.fetchText`. `allowedHosts`:
-`api.hh.ru`, `career.habr.com`, `geekjob.ru`. Нет OAuth, cookies, browser automation,
+`api.hh.ru`, `career.habr.com`, `geekjob.ru`. Для HH поддерживается токен
+зарегистрированного приложения через переменную `HH_ACCESS_TOKEN`. Получите его
+по [инструкции HH](https://github.com/hhru/api/blob/master/docs/authorization_for_application.md)
+после регистрации приложения на [dev.hh.ru](https://dev.hh.ru/admin), добавьте
+`HH_ACCESS_TOKEN=...` в локальный `.env` career-ops и запустите сканирование.
+Не записывайте токен в `portals.yml` или git. Плагин отправляет его только на
+`api.hh.ru` в заголовке `Authorization: Bearer`. Наличие токена не гарантирует
+устранение 403: причина текущего отказа не установлена.
+
+Нет cookies, browser automation,
 откликов, запросов к работодателям, HH HTML fallback, GeekJob `/json/` или `/rest/`.
 Никакие URL из карточек не используются для сетевых запросов.
 
@@ -129,6 +138,10 @@ HTTP-заголовки ошибки. Поэтому `Retry-After` в этой �
 Известная пустая структура — `[]`. Неизвестная/сломанная структура, challenge
 или login wall — ошибка. После удачных страниц возвращается частичный результат;
 `ctx.log` получает JSON с source, completed_pages, failed_page и category.
+После HTTP 403 HH прекращает остальные HH-запросы в текущем скане. Provider
+возвращает `sourceStatuses` со статусом `ok`, `partial` или `failed` для каждого
+выбранного источника; интеграция со scanner core должна переносить эти статусы
+в итоговый JSON.
 Остальные запросы/категории и исправные площадки продолжают работать. Если ни
 одна площадка не завершилась успешно, provider выбрасывает ошибку.
 
@@ -171,7 +184,7 @@ HH `access` — HTTP 403 `forbidden` из текущего окружения. �
 
 | Источник | Проверенные документы и результат |
 | --- | --- |
-| HH | [API](https://github.com/hhru/api), [условия API](https://dev.hh.ru/admin/developer_agreement), [robots](https://hh.ru/robots.txt). Реализация использует только публичный поиск API. Условия API отдельно предусматривают регистрацию приложения; доступность анонимного endpoint не отменяет условий. Live из текущего окружения: 403. |
+| HH | [API](https://github.com/hhru/api), [авторизация](https://github.com/hhru/api/blob/master/docs/authorization.md), [условия сайта](https://hh.ru/article/33205). Пункты 6.1.38 и 6.2.2 запрещают автоматизированный парсинг сайта и направляют приложения к API. Поэтому `mode: html` и HTML fallback после 403 отсутствуют. Доступ через токен зарегистрированного приложения поддерживается, но текущий 403 может иметь другую причину. |
 | Habr Career | [robots](https://career.habr.com/robots.txt), [соглашение](https://career.habr.com/info/legal). Robots не запрещает публичные listing pages, запрещает private/action routes. Соглашение ограничивает воспроизведение и распространение контента; robots сам по себе не даёт разрешения на это. |
 | GeekJob | [robots](https://geekjob.ru/robots.txt), [условия](https://geekjob.ru/terms). `/json/` и `/rest/` запрещены robots; плагин использует только HTML listings. |
 
