@@ -20,7 +20,7 @@ The plugin must use the existing career-ops plugin/provider API without changes 
 
 - Do not add a new `contrib` layer or custom provider framework.
 - Do not modify career-ops core or extend its Job API.
-- Do not add OAuth2, login, user cookies, CAPTCHA bypass, application submission, or browser automation in v1.
+- Do not add login, user cookies, CAPTCHA bypass, application submission, or browser automation. An optional registered-application token is supported for HH API.
 - Do not make network requests to employer sites or any host outside the configured job platforms.
 - Do not add third-party runtime dependencies in v1; use Node.js ESM and the standard library.
 - All HTTP must go through the plugin `ctx.fetch*` methods so `allowedHosts` remains effective.
@@ -191,10 +191,10 @@ Each adapter recognizes `api`, `html`, or `auto` where meaningful.
 
 - Default and recommended mode: `api`.
 - `api`: use only the official public HH vacancies API.
-- `html`: reserved, not enabled in v1 unless a later terms review explicitly approves the intended endpoints.
+- `html`: unavailable; HH site terms prohibit automated scraping.
 - `auto`: in v1 behaves as API with retry, then returns an API error. It does **not** fall back to HH HTML search.
 
-Reason: HH provides an official API, while its robots policy restricts generic crawling of query-based pages. Keep v1 on the documented API.
+Reason: HH provides an official API, and its site terms prohibit automated collection through page parsing. Use an application token where available.
 
 ### Habr Career
 
@@ -373,7 +373,7 @@ Live tests:
 
 These are preliminary engineering constraints, not legal advice:
 
-- HH has an official API and API usage agreement. Use anonymous public vacancy methods only. Do not perform active user actions. Keep HTML search fallback disabled in v1.
+- HH has an official API and documents registered-application tokens. Do not perform active user actions. Keep HTML search fallback disabled under the current site terms.
 - Habr Career's robots policy does not prohibit public vacancy listing/detail pages but prohibits private/action areas. Use public read-only HTML conservatively.
 - GeekJob's robots policy allows public pages but disallows `/json/` and `/rest/`. Use public HTML only and do not probe those endpoints.
 - Re-check terms before the first public release and record the review date and links in the plugin README.
@@ -382,6 +382,7 @@ References:
 
 - HH API: <https://github.com/hhru/api>
 - HH API agreement: <https://dev.hh.ru/admin/developer_agreement>
+- HH site terms: <https://hh.ru/article/33205>
 - HH robots: <https://hh.ru/robots.txt>
 - Habr Career robots: <https://career.habr.com/robots.txt>
 - GeekJob robots: <https://geekjob.ru/robots.txt>
@@ -394,7 +395,7 @@ Use SemVer in `manifest.json`:
 - minor: backward-compatible source/features/config additions;
 - major: incompatible configuration or provider behavior.
 
-Current career-ops installs plugins by exact commit SHA and has no automatic `plugins.mjs update` command. Do not modify core for this project. Release flow:
+Current career-ops installs plugins by exact commit SHA and has no automatic `plugins.mjs update` command. The scanner core also needs a small change to show per-source plugin failures in its JSON receipt. Release flow:
 
 1. Tag and publish a plugin release.
 2. Update the official registry entry to the new version and exact SHA.
@@ -457,8 +458,8 @@ They are CLI parsers, not provider hooks. When migrating:
 - Preserve original company and location wording; normalize conservatively for matching.
 - Return structured salary where possible and preserve raw details in `note`.
 - Network access is restricted to the platform hosts.
-- No OAuth2 or third-party dependencies in v1.
+- No OAuth2 implementation or third-party dependencies; an existing HH application token may be supplied.
 - SemVer releases use existing pinned-SHA installation mechanics.
-- Health checks remain plugin-local because core changes are out of scope.
+- Health checks remain plugin-local; scanner core records per-source status in JSON receipts.
 - Fixture tests plus non-blocking scheduled live smoke tests.
 - Scope is Russian-language vacancies across Russia and CIS, not only jobs geographically located in Russia.

@@ -14,16 +14,29 @@ export default {
       const config = parseConfig(entry);
       const results = await Promise.allSettled(config.selected.map(id => adapters[id](config.sources[id], ctx)));
       const jobs = [];
+      const sourceStatuses = [];
       let successes = 0;
       results.forEach((result, index) => {
-        if (result.status === 'fulfilled') { successes++; jobs.push(...result.value); }
-        else ctx.log?.('ru-market', JSON.stringify({ source: config.selected[index], category: categoryOf(result.reason), status: 'failed' }));
+        const source = config.selected[index];
+        if (result.status === 'fulfilled') {
+          successes++;
+          jobs.push(...result.value);
+          sourceStatuses.push({ source, ...result.value.sourceStatus, count: result.value.length });
+        } else {
+          const category = categoryOf(result.reason);
+          sourceStatuses.push({ source, status: 'failed', category, completed_pages: 0, count: 0 });
+          ctx.log?.('ru-market', JSON.stringify({ source, category, status: 'failed' }));
+        }
       });
       if (!successes) {
-        if (results.length === 1) throw results[0].reason;
-        throw new SourceError('sources-failed', `All sources failed: ${results.map((r, i) => `${config.selected[i]}=${categoryOf(r.reason)}`).join(', ')}`);
+        const error = results.length === 1 ? results[0].reason
+          : new SourceError('sources-failed', `All sources failed: ${results.map((r, i) => `${config.selected[i]}=${categoryOf(r.reason)}`).join(', ')}`);
+        error.sourceStatuses = sourceStatuses;
+        throw error;
       }
-      return deduplicate(jobs, config.order);
+      const merged = deduplicate(jobs, config.order);
+      Object.defineProperty(merged, 'sourceStatuses', { value: sourceStatuses });
+      return merged;
     },
   },
 };

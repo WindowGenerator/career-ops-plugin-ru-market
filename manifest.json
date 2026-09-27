@@ -1,11 +1,12 @@
 {
   "id": "ru-market",
   "name": "ru-market",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "apiVersion": 1,
   "description": "Discover public Russian-language vacancies across HH, Habr Career and GeekJob.",
   "hooks": ["provider"],
   "requiredEnv": [],
+  "optionalEnv": ["HH_ACCESS_TOKEN"],
   "allowedHosts": ["api.hh.ru", "career.habr.com", "geekjob.ru"],
   "skill": "skill.md",
   "humanInTheLoop": true,

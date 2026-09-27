@@ -93,10 +93,20 @@ for (const source of SOURCES) {
   });
 }
 
-test('HH auto never falls back to HTML', async () => {
+test('HH auto never falls back to HTML and stops after first 403', async () => {
   const urls = [];
-  await assert.rejects(plugin.provider.fetch({ ru_market: { source: 'hh', sources: { hh: { mode: 'auto' } } } }, ctxFor(async url => { urls.push(url); throw httpError(403); })));
+  await assert.rejects(plugin.provider.fetch({ ru_market: { source: 'hh', sources: { hh: { mode: 'auto', queries: ['Python', 'Java'] } } } }, ctxFor(async url => { urls.push(url); throw httpError(403); })));
   assert.strictEqual(urls.length, 1); assert(urls.every(u => new URL(u).hostname === 'api.hh.ru'));
+});
+test('HH application token is sent only to HH API', async () => {
+  const seen = [];
+  const ctx = { ...ctxFor(async (url, options) => {
+    seen.push({ url, headers: options.headers });
+    return fixture(sourceFor(url));
+  }), env: { HH_ACCESS_TOKEN: 'example-token' } };
+  await plugin.provider.fetch({ ru_market: { source: 'all', max_pages: 1 } }, ctx);
+  assert.strictEqual(seen.find(x => x.url.includes('api.hh.ru')).headers.Authorization, 'Bearer example-token');
+  assert(seen.filter(x => !x.url.includes('api.hh.ru')).every(x => !x.headers.Authorization));
 });
 test('high confidence merges all links, HH primary', () => {
   const jobs = SOURCES.flatMap(s => parse(s).jobs);
@@ -134,6 +144,19 @@ test('one failed source preserves other results', async () => {
     const source = sourceFor(url); if (source === 'hh') throw httpError(403); return fixture(source);
   }));
   assert.strictEqual(jobs.length, 1); assert.match(jobs[0].url, /habr/); assert.match(jobs[0].note, /GeekJob/);
+  assert.deepStrictEqual(jobs.sourceStatuses.map(({ source, status, category }) => ({ source, status, category })), [
+    { source: 'hh', status: 'failed', category: 'access' },
+    { source: 'habr-career', status: 'ok', category: undefined },
+    { source: 'geekjob', status: 'ok', category: undefined },
+  ]);
+});
+test('HH partial pages stop remaining queries and retain jobs', async () => {
+  const urls = [];
+  const jobs = await plugin.provider.fetch({ ru_market: { source: 'hh', sources: { hh: { queries: ['Python', 'Java'], max_pages: 2 } } } },
+    ctxFor(async url => { urls.push(url); if (urls.length === 2) throw httpError(403); return fixture('hh'); }));
+  assert.strictEqual(urls.length, 2);
+  assert.strictEqual(jobs.length, 1);
+  assert.deepStrictEqual(jobs.sourceStatuses, [{ source: 'hh', status: 'partial', completed_pages: 1, failed_page: 2, category: 'access', count: 1 }]);
 });
 test('all failed sources is an error, not empty', async () => {
   await assert.rejects(plugin.provider.fetch({ ru_market: { source: 'all' } }, ctxFor(async () => { throw httpError(403); })), e => e.category === 'sources-failed');
