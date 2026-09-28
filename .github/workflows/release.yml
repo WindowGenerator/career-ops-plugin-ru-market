@@ -18,8 +18,11 @@ jobs:
         run: node --input-type=module -e 'import fs from "node:fs"; const m=JSON.parse(fs.readFileSync("manifest.json")); if(process.env.GITHUB_REF_NAME !== `v${m.version}`) process.exit(1);'
       - run: npm test
       - name: Prepare registry entry
-        run: node scripts/registry-entry.mjs "$GITHUB_SHA" > ru-market.json
+        run: node scripts/registry-entry.mjs "$(git rev-parse HEAD)" > ru-market.json
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" ru-market.json --verify-tag --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+        run: |
+          printf 'Release commit SHA: `%s`\n\n' "$(git rev-parse HEAD)" > release-notes.md
+          cat RELEASE_NOTES.md >> release-notes.md
+          gh release create "$GITHUB_REF_NAME" ru-market.json --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md
