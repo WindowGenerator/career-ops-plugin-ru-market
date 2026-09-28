@@ -7,8 +7,10 @@
    parser failures from access restrictions. Review linked platform policies.
 3. Commit the reviewed tree. Push the commit and matching `v<version>` tag to
    `WindowGenerator/career-ops-plugin-ru-market`. The release workflow verifies the
-   tag/version, runs offline tests and publishes a GitHub release with a pinned
-   registry entry. Offline/integration CI and scheduled health are separate jobs.
+   tag/version, runs offline tests and publishes a GitHub release with the exact
+   release commit SHA in its notes and pinned registry entry. The SHA is added
+   during publishing because a tracked file cannot contain its own commit SHA.
+   Offline/integration CI and scheduled health are separate jobs.
 4. Install the published exact SHA in career-ops:
 
    ```sh
