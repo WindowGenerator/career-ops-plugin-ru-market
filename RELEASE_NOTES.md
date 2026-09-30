@@ -1,3 +1,9 @@
+## 0.2.1
+
+Сокращён README. В релиз добавлены `install.sh` и `update.sh` с закреплённым
+SHA релизного коммита. Скрипты используют штатный CLI career-ops и включают
+плагин после установки.
+
 ## 0.2.0
 
 Проверенный коммит реализации: `8f2435b7d7cf018e3cc169b996181e2c0f0030a9`.
@@ -30,8 +36,8 @@ is not confirmed; use source-level enabled flags where necessary.
 
 Known limitations: current core drops Retry-After error headers; unlabelled
 GeekJob dates are omitted; listing cards without descriptions produce possible
-cross-listings rather than automatic merges. Platform terms review is recorded
-in README; robots policy does not authorize redistribution of vacancy content.
+cross-listings rather than automatic merges. Platform terms are linked in README;
+robots policy does not authorize redistribution of vacancy content.
 
 Install using the exact commit SHA shown in the attached ru-market.json.
 The plugin is community-unverified until the official registry accepts it.

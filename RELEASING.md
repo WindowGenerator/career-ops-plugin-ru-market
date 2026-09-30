@@ -8,10 +8,12 @@
 3. Commit the reviewed tree. Push the commit and matching `v<version>` tag to
    `WindowGenerator/career-ops-plugin-ru-market`. The release workflow verifies the
    tag/version, runs offline tests and publishes a GitHub release with the exact
-   release commit SHA in its notes and pinned registry entry. The SHA is added
-   during publishing because a tracked file cannot contain its own commit SHA.
+   release commit SHA in its notes, pinned registry entry, and `install.sh` /
+   `update.sh` assets. The SHA is injected during publishing because a tracked
+   file cannot contain its own commit SHA.
    Offline/integration CI and scheduled health are separate jobs.
-4. Install the published exact SHA in career-ops:
+4. Run the published `install.sh` from the career-ops directory, or install the
+   exact SHA manually:
 
    ```sh
    node plugins.mjs add WindowGenerator/career-ops-plugin-ru-market --sha <40-hex-commit> --confirm
@@ -28,8 +30,9 @@
    include `registrationIssue` pointing to the real issue. Use the upstream
    `plugin-registry.md` PR template. Do not invent an issue number or pin a tag
    name as a SHA. An initial PR description is in `examples/registry-pr.md`.
-7. Reinstall each accepted update using its exact SHA. Search parameters and
-   enabled state remain in career-ops user files, outside this repository.
+7. For an update, run the new release's `update.sh` from the career-ops directory.
+   It removes the installed plugin and installs the new SHA with `--confirm`.
+   Search parameters remain in `portals.yml`, outside this repository.
 
 The release workflow does not open upstream issues/PRs or send messages.
 Approval is granted by upstream maintainers after reviewing the pinned code.
