@@ -26,7 +26,8 @@ export default {
           sourceStatuses.push({ source, ...result.value.sourceStatus, count: result.value.length });
         } else {
           const category = categoryOf(result.reason);
-          sourceStatuses.push({ source, status: 'failed', category, completed_pages: 0, count: 0 });
+          sourceStatuses.push({ source, status: 'failed', category, completed_pages: 0, count: 0,
+            ...(result.reason?.sourceDiagnostic ?? {}) });
           ctx.log?.('ru-market', JSON.stringify({ source, category, status: 'failed' }));
         }
       });
