@@ -19,10 +19,18 @@ jobs:
       - run: npm test
       - name: Prepare registry entry
         run: node scripts/registry-entry.mjs "$(git rev-parse HEAD)" > ru-market.json
+      - name: Prepare install scripts
+        run: |
+          sha="$(git rev-parse HEAD)"
+          for script in install.sh update.sh; do
+            sed -i "s/__RELEASE_SHA__/$sha/g" "$script"
+            sh -n "$script"
+            grep -q "$sha" "$script"
+          done
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           printf 'Release commit SHA: `%s`\n\n' "$(git rev-parse HEAD)" > release-notes.md
           cat RELEASE_NOTES.md >> release-notes.md
-          gh release create "$GITHUB_REF_NAME" ru-market.json --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          gh release create "$GITHUB_REF_NAME" ru-market.json install.sh update.sh --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md
