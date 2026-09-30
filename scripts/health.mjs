@@ -2,13 +2,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { parseConfig, SOURCES } from '../lib/config.mjs';
+import { parseConfig } from '../lib/config.mjs';
 import { adapters } from '../index.mjs';
 import { categoryOf } from '../lib/errors.mjs';
 
 export async function checkHealth(ctx) {
   const config = parseConfig({ ru_market: { source: 'all', max_pages: 1 } });
-  const sources = await Promise.all(SOURCES.map(async source => {
+  const sources = await Promise.all(config.selected.map(async source => {
     try {
       // Exactly one listing request per source, with no retries or detail fetches.
       const jobs = await adapters[source](config.sources[source], ctx, { retries: 0 });

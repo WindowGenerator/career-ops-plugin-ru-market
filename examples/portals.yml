@@ -28,3 +28,9 @@ job_boards:
           enabled: true
           mode: html
           max_pages: 5
+        superjob:
+          enabled: false # requires SUPERJOB_API_KEY in career-ops .env
+          queries: [Python backend]
+        trudvsem:
+          enabled: false
+          queries: [Python backend]

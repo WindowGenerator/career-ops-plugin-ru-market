@@ -2,11 +2,13 @@
 set -euo pipefail
 plugin_root="$(cd "$(dirname "$0")/.." && pwd)"
 core_root="${CAREER_OPS_ROOT:-$plugin_root/../career-ops}"
+core_root="$(cd "$core_root" && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/ru-market-integration.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
 git -C "$core_root" archive HEAD | tar -x -C "$test_root"
 ln -s "$core_root/node_modules" "$test_root/node_modules"
 cd "$test_root"
+export CAREER_OPS_ROOT="$test_root"
 node plugins.mjs new ru-market
 (cd "$plugin_root" && tar --exclude=.git --exclude=node_modules --exclude=health.json -cf - .) | tar -xf - -C plugins.local/ru-market
 node plugin-audit.mjs plugins.local/ru-market

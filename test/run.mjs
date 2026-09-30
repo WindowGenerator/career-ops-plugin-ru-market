@@ -4,7 +4,9 @@ import plugin, { adapters } from '../index.mjs';
 import { parseHh } from '../lib/hh.mjs';
 import { parseHabr } from '../lib/habr-career.mjs';
 import { parseGeekjob } from '../lib/geekjob.mjs';
-import { parseConfig, SOURCES } from '../lib/config.mjs';
+import { parseSuperjob } from '../lib/superjob.mjs';
+import { parseTrudvsem } from '../lib/trudvsem.mjs';
+import { parseConfig, DEFAULT_SOURCES } from '../lib/config.mjs';
 import { parseDate, parseSalary, jobUrl, normalizedCompany } from '../lib/normalize.mjs';
 import { deduplicate } from '../lib/dedup.mjs';
 import { withRetry, retryAfterMs } from '../lib/retry.mjs';
@@ -25,7 +27,7 @@ const ctxFor = run => ({ fetchText: run, fetchJson: run, log() {} });
 const httpError = status => Object.assign(new Error(`HTTP ${status}`), { status });
 const sourceFor = url => url.includes('api.hh.ru') ? 'hh' : url.includes('career.habr.com') ? 'habr-career' : 'geekjob';
 
-for (const source of SOURCES) {
+for (const source of DEFAULT_SOURCES) {
   test(`${source}: normal contract and salary`, () => {
     const { jobs, hasNext } = parse(source);
     assert.strictEqual(jobs.length, 1);
@@ -109,7 +111,7 @@ test('HH application token is sent only to HH API', async () => {
   assert(seen.filter(x => !x.url.includes('api.hh.ru')).every(x => !x.headers.Authorization));
 });
 test('high confidence merges all links, HH primary', () => {
-  const jobs = SOURCES.flatMap(s => parse(s).jobs);
+  const jobs = DEFAULT_SOURCES.flatMap(s => parse(s).jobs);
   const merged = deduplicate(jobs);
   assert.strictEqual(merged.length, 1); assert.match(merged[0].url, /hh.ru/);
   for (const job of jobs.slice(1)) assert(merged[0].note.includes(job.url));
@@ -117,7 +119,7 @@ test('high confidence merges all links, HH primary', () => {
   assert.strictEqual(jobs[0].note.includes('cross-listed'), false);
 });
 test('primary source override', () => {
-  assert.match(deduplicate(SOURCES.flatMap(s => parse(s).jobs), ['geekjob', 'hh', 'habr-career'])[0].url, /geekjob/);
+  assert.match(deduplicate(DEFAULT_SOURCES.flatMap(s => parse(s).jobs), ['geekjob', 'hh', 'habr-career'])[0].url, /geekjob/);
 });
 test('medium confidence preserves reciprocal links', () => {
   const jobs = ['hh', 'habr-career'].flatMap(s => parse(s).jobs).map(j => ({ ...j, description: '' }));
@@ -249,6 +251,68 @@ test('health is one page/request per source, no vacancy payloads', async () => {
   const failed = await checkHealth(ctxFor(async url => { throw errors[sourceFor(url)]; }));
   assert.strictEqual(failed.ok, false);
   assert.deepStrictEqual(failed.sources.map(s => s.status), ['rate-limited', 'access', 'server']);
+});
+
+const superjobPage = (more = false) => ({ objects: [{ id: 25746005, profession: 'Python engineer',
+  link: 'https://www.superjob.ru/vakansii/python-engineer-25746005-130520.html?utm=x', firm_name: 'ООО Тест',
+  town: { title: 'Москва' }, work: 'Разработка Python сервисов', date_published: 1780000000,
+  payment_from: 250000, payment_to: 350000, currency: 'rub', agreement: false }], total: 2, more });
+const trudvsemPage = (total = 1) => ({ status: '200', meta: { total }, results: { vacancies: [{ vacancy: {
+  id: 'c50d9cd8-bbe3-11f1-9a11-2f8460579df4', 'job-name': 'Python engineer',
+  vac_url: 'https://trudvsem.ru/vacancy/card/1227700702074/c50d9cd8-bbe3-11f1-9a11-2f8460579df4?utm=x',
+  company: { name: 'ООО Тест' }, region: { name: 'Самарская область' }, addresses: { address: [{ location: 'Тольятти' }] },
+  'creation-date': '2026-09-29', salary_min: 90000, salary_max: 100000, currency: '«руб.»', duty: 'Разработка Python сервисов',
+} }] } });
+
+test('new sources are opt-in and legacy precedence remains valid', () => {
+  const defaultCfg = parseConfig({ ru_market: { source: 'all' } });
+  assert.deepStrictEqual(defaultCfg.selected, DEFAULT_SOURCES);
+  assert.deepStrictEqual(defaultCfg.order, [...DEFAULT_SOURCES, 'superjob', 'trudvsem']);
+  assert.deepStrictEqual(parseConfig({ ru_market: { source: 'all', sources: { superjob: { enabled: true }, trudvsem: { enabled: true } } } }).selected,
+    [...DEFAULT_SOURCES, 'superjob', 'trudvsem']);
+  assert.deepStrictEqual(parseConfig({ ru_market: { source: 'superjob', sources: { superjob: { enabled: true } } } }).selected, ['superjob']);
+  assert.throws(() => parseConfig({ ru_market: { source: 'trudvsem' } }), e => e.category === 'config');
+  assert.throws(() => parseConfig({ ru_market: { sources: { superjob: { mode: 'html' } } } }), e => e.category === 'config');
+});
+test('SuperJob parses public listing and sends application key only to its API', async () => {
+  const parsed = parseSuperjob(superjobPage());
+  assert.strictEqual(parsed.jobs.length, 1);
+  assert.deepStrictEqual(parsed.jobs[0].salary, { from: 250000, to: 350000, currency: 'RUB' });
+  assert(!parsed.jobs[0].url.includes('?'));
+  assert.strictEqual(parsed.jobs[0].postedAt, 1780000000000);
+  const seen = [];
+  const cfg = parseConfig({ ru_market: { source: 'superjob', max_pages: 2, sources: { superjob: { enabled: true, queries: ['python'], per_page: 1 } } } }).sources.superjob;
+  const jobs = await adapters.superjob(cfg, { env: { SUPERJOB_API_KEY: 'test-key' }, fetchJson: async (url, options) => {
+    seen.push({ url, headers: options.headers }); return superjobPage(seen.length === 1);
+  }, log() {} });
+  assert.strictEqual(jobs.length, 1);
+  assert.strictEqual(seen.length, 2);
+  assert.strictEqual(new URL(seen[1].url).searchParams.get('page'), '1');
+  assert.strictEqual(new URL(seen[0].url).searchParams.get('keyword'), 'python');
+  assert.strictEqual(seen[0].headers['X-Api-App-Id'], 'test-key');
+  await assert.rejects(adapters.superjob(cfg, ctxFor(async () => superjobPage())), e => e.category === 'config');
+  assert.throws(() => parseSuperjob({ objects: [{}], more: false }), e => e.category === 'broken-markup');
+});
+test('Работа России parses listing and advances offset', async () => {
+  const parsed = parseTrudvsem(trudvsemPage());
+  assert.strictEqual(parsed.jobs.length, 1);
+  assert.deepStrictEqual(parsed.jobs[0].salary, { from: 90000, to: 100000, currency: 'RUB' });
+  assert.strictEqual(parsed.jobs[0].location, 'Тольятти');
+  assert(!parsed.jobs[0].url.includes('?'));
+  const seen = [];
+  const cfg = parseConfig({ ru_market: { source: 'trudvsem', max_pages: 2, sources: { trudvsem: { enabled: true, queries: ['python'], per_page: 1 } } } }).sources.trudvsem;
+  const jobs = await adapters.trudvsem(cfg, ctxFor(async url => { seen.push(url); return trudvsemPage(2); }));
+  assert.strictEqual(jobs.length, 1);
+  assert.deepStrictEqual(seen.map(url => new URL(url).searchParams.get('offset')), ['0', '1']);
+  assert.strictEqual(new URL(seen[0]).searchParams.get('text'), 'python');
+  assert.throws(() => parseTrudvsem({ status: '200', meta: { total: 1 }, results: {} }), e => e.category === 'broken-markup');
+});
+test('new sources enforce listing and vacancy URL boundaries', () => {
+  for (const url of ['https://api.superjob.ru/2.0/vacancies/', 'https://opendata.trudvsem.ru/api/v1/vacancies']) assertRequestUrl(url);
+  for (const url of ['https://api.superjob.ru/2.0/resumes/', 'https://opendata.trudvsem.ru/api/v1/vacancies/vacancy/1/2',
+    'http://opendata.trudvsem.ru/api/v1/vacancies', 'https://api.superjob.ru:444/2.0/vacancies/']) assert.throws(() => assertRequestUrl(url));
+  assert.strictEqual(jobUrl('https://evil.example/vakansii/engineer-123.html', 'superjob'), undefined);
+  assert.strictEqual(jobUrl('https://trudvsem.ru/company/123', 'trudvsem'), undefined);
 });
 
 let failures = 0;
