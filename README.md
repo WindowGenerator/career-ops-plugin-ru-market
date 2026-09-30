@@ -22,6 +22,8 @@ curl -LsSf https://github.com/WindowGenerator/career-ops-plugin-ru-market/releas
 
 Добавьте запись из [примера](examples/portals.yml) в свой `portals.yml` и замените поисковые запросы. Источник выбирается через `ru_market.source`: `all`, `hh`, `habr-career`, `geekjob`, `superjob` или `trudvsem`. Новые источники выключены по умолчанию; для `source: all` включите `sources.superjob.enabled` или `sources.trudvsem.enabled`. Для SuperJob задайте `SUPERJOB_API_KEY` в `.env` приложения career-ops. Настройка доступа к HH описана в [docs/hh.md](docs/hh.md).
 
+**SuperJob:** на 30 сентября 2026 года консоль разработчика некорректно проводит OAuth2-сценарий, из-за чего нам пока не удалось нормально зарегистрировать приложение и получить Secret key для живой проверки. Для публичного поиска вакансий плагину нужен именно Secret key приложения, а не пользовательский OAuth2-токен ([документация API](https://api.superjob.ru/)).
+
 ## Проверка
 
 ```sh

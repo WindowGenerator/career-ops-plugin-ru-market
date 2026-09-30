@@ -71,7 +71,7 @@ for (const source of DEFAULT_SOURCES) {
     const ctx = { ...ctxFor(async () => { if (++count > 1) throw httpError(503); return fixture(source); }), log: (...args) => warnings.push(args[1]) };
     const jobs = await adapters[source](config(source), ctx);
     assert.strictEqual(jobs.length, 1); assert.strictEqual(count, 4);
-    assert.deepStrictEqual(warnings.map(JSON.parse), [{ source, completed_pages: 1, failed_page: 2, category: 'server' }]);
+    assert.deepStrictEqual(warnings.map(JSON.parse), [{ source, completed_pages: 1, failed_page: 2, query_index: 1, http_status: 503, category: 'server' }]);
   });
   test(`${source}: access failures are not retried`, async () => {
     let count = 0;
@@ -158,7 +158,8 @@ test('HH partial pages stop remaining queries and retain jobs', async () => {
     ctxFor(async url => { urls.push(url); if (urls.length === 2) throw httpError(403); return fixture('hh'); }));
   assert.strictEqual(urls.length, 2);
   assert.strictEqual(jobs.length, 1);
-  assert.deepStrictEqual(jobs.sourceStatuses, [{ source: 'hh', status: 'partial', completed_pages: 1, failed_page: 2, category: 'access', count: 1 }]);
+  assert.deepStrictEqual(jobs.sourceStatuses, [{ source: 'hh', status: 'partial', completed_pages: 1, failed_page: 2, query_index: 1,
+    http_status: 403, category: 'access', count: 1 }]);
 });
 test('all failed sources is an error, not empty', async () => {
   await assert.rejects(plugin.provider.fetch({ ru_market: { source: 'all' } }, ctxFor(async () => { throw httpError(403); })), e => e.category === 'sources-failed');
@@ -190,7 +191,19 @@ test('salary variants and predicted salary', () => {
   assert.deepStrictEqual(parseSalary('3.5k — 4k € / месяц'), { from: 3500, to: 4000, currency: 'EUR' });
   assert.strictEqual(parseSalary('по договорённости'), undefined);
   const text = fixture('habr-career').replace('class="basic-salary"', 'class="predicted-salary"');
-  assert.strictEqual(parseHabr(text).jobs[0].salary, undefined);
+  const predicted = parseHabr(text).jobs[0];
+  assert.strictEqual(predicted.salary, undefined);
+  assert(!predicted.note.includes('salary:'));
+});
+test('Habr company rating and market salary do not enter job data', () => {
+  const text = fixture('habr-career')
+    .replace('<a>Тестовая компания</a>', '<a href="/companies/test">Тестовая компания</a><div class="vacancy-card__company-rating"><a href="/companies/test/scores">4.72</a></div>')
+    .replace('<div class="basic-salary">от 250 000 до 350 000 ₽ на руки в месяц</div>',
+      '<div class="predicted-salary">Зарплата не указана <span>Похожие специалисты получают 250 000 – 350 000 ₽</span></div>');
+  const job = parseHabr(text).jobs[0];
+  assert.strictEqual(job.company, 'Тестовая компания');
+  assert.strictEqual(job.salary, undefined);
+  assert.strictEqual(job.note, 'source: habr-career');
 });
 test('company preserves original and does not transliterate', () => {
   assert.strictEqual(normalizedCompany('ООО «Тестовая компания»'), 'тестовая компания');
@@ -300,12 +313,29 @@ test('Работа России parses listing and advances offset', async () =>
   assert.strictEqual(parsed.jobs[0].location, 'Тольятти');
   assert(!parsed.jobs[0].url.includes('?'));
   const seen = [];
-  const cfg = parseConfig({ ru_market: { source: 'trudvsem', max_pages: 2, sources: { trudvsem: { enabled: true, queries: ['python'], per_page: 1 } } } }).sources.trudvsem;
-  const jobs = await adapters.trudvsem(cfg, ctxFor(async url => { seen.push(url); return trudvsemPage(2); }));
+  const cfg = parseConfig({ ru_market: { source: 'trudvsem', max_pages: 2, sources: { trudvsem: { enabled: true, queries: ['python'], per_page: 100 } } } }).sources.trudvsem;
+  const jobs = await adapters.trudvsem(cfg, ctxFor(async url => { seen.push(url); return trudvsemPage(101); }));
   assert.strictEqual(jobs.length, 1);
   assert.deepStrictEqual(seen.map(url => new URL(url).searchParams.get('offset')), ['0', '1']);
   assert.strictEqual(new URL(seen[0]).searchParams.get('text'), 'python');
   assert.throws(() => parseTrudvsem({ status: '200', meta: { total: 1 }, results: {} }), e => e.category === 'broken-markup');
+  assert.throws(() => parseTrudvsem({ status: '500' }), e => e.category === 'server' && e.status === 500);
+});
+test('Работа России partial server error reports safe request coordinates', async () => {
+  const logs = [];
+  let calls = 0;
+  const entry = { ru_market: { source: 'trudvsem', max_pages: 2, sources: { trudvsem: { enabled: true, queries: ['private search text'], per_page: 1 } } } };
+  const jobs = await plugin.provider.fetch(entry, { ...ctxFor(async () => {
+    if (++calls > 1) throw httpError(500);
+    return trudvsemPage(2);
+  }), log: (_, value) => logs.push(JSON.parse(value)) });
+  assert.strictEqual(jobs.length, 1);
+  assert.deepStrictEqual(jobs.sourceStatuses, [{ source: 'trudvsem', status: 'partial', completed_pages: 1,
+    failed_page: 2, query_index: 1, request: 'https://opendata.trudvsem.ru/api/v1/vacancies?limit=1&offset=1',
+    http_status: 500, category: 'server', count: 1 }]);
+  assert.strictEqual(logs[0].request, jobs.sourceStatuses[0].request);
+  assert(!JSON.stringify(logs).includes('private search text'));
+  assert(!JSON.stringify(jobs.sourceStatuses).includes('private search text'));
 });
 test('new sources enforce listing and vacancy URL boundaries', () => {
   for (const url of ['https://api.superjob.ru/2.0/vacancies/', 'https://opendata.trudvsem.ru/api/v1/vacancies']) assertRequestUrl(url);
