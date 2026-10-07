@@ -1,0 +1,41 @@
+diff --git a/providers/local-parser.mjs b/providers/local-parser.mjs
+index 26eaa940..a43db4dd 100644
+--- a/providers/local-parser.mjs
++++ b/providers/local-parser.mjs
+@@ -205,6 +205,16 @@ function normalizeParserJob(job, entry) {
+   );
+   if (postedAt !== undefined) out.postedAt = postedAt;
+ 
++  for (const key of ['description', 'note']) {
++    if (typeof job[key] === 'string' && job[key].trim()) out[key] = job[key].trim();
++  }
++  const salary = job.salary;
++  if (salary && typeof salary === 'object' && /^[A-Z]{3}$/.test(salary.currency ?? '')) {
++    const bounds = ['from', 'to'].filter(key => typeof salary[key] === 'number' && Number.isFinite(salary[key]) && salary[key] >= 0);
++    if (bounds.length && !(bounds.length === 2 && salary.from > salary.to)) {
++      out.salary = Object.fromEntries([['currency', salary.currency], ...bounds.map(key => [key, salary[key]])]);
++    }
++  }
+   return out;
+ }
+ 
+@@ -235,9 +245,16 @@ async function runLocalParser(entry) {
+     throw new Error('local parser JSON must be an array or contain jobs[]/results[]');
+   }
+ 
+-  return rawJobs
+-    .map(job => normalizeParserJob(job, entry))
+-    .filter(Boolean);
++  const jobs = rawJobs.map(job => normalizeParserJob(job, entry)).filter(Boolean);
++  if (!Array.isArray(payload) && payload.sourceStatuses !== undefined) {
++    if (!Array.isArray(payload.sourceStatuses) || payload.sourceStatuses.some(status =>
++      !status || typeof status.source !== 'string' || !['ok', 'partial', 'failed'].includes(status.status)
++      || !Number.isInteger(status.completed_pages) || status.completed_pages < 0)) {
++      throw new Error('local parser returned invalid sourceStatuses');
++    }
++    Object.defineProperty(jobs, 'sourceStatuses', { value: payload.sourceStatuses });
++  }
++  return jobs;
+ }
+ 
+ /** @type {Provider} */

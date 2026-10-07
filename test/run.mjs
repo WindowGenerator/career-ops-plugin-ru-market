@@ -280,7 +280,7 @@ const trudvsemPage = (total = 1) => ({ status: '200', meta: { total }, results: 
 test('new sources are opt-in and legacy precedence remains valid', () => {
   const defaultCfg = parseConfig({ ru_market: { source: 'all' } });
   assert.deepStrictEqual(defaultCfg.selected, DEFAULT_SOURCES);
-  assert.deepStrictEqual(defaultCfg.order, [...DEFAULT_SOURCES, 'superjob', 'trudvsem']);
+  assert.deepStrictEqual(defaultCfg.order, [...DEFAULT_SOURCES, 'superjob', 'trudvsem', 'getmatch']);
   assert.deepStrictEqual(parseConfig({ ru_market: { source: 'all', sources: { superjob: { enabled: true }, trudvsem: { enabled: true } } } }).selected,
     [...DEFAULT_SOURCES, 'superjob', 'trudvsem']);
   assert.deepStrictEqual(parseConfig({ ru_market: { source: 'superjob', sources: { superjob: { enabled: true } } } }).selected, ['superjob']);

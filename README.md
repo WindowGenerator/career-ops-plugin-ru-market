@@ -20,7 +20,7 @@ curl -LsSf https://github.com/WindowGenerator/career-ops-plugin-ru-market/releas
 
 `update.sh` удаляет установленный плагин и ставит версию по SHA релизного коммита. Оба скрипта включают плагин после установки.
 
-Добавьте запись из [примера](examples/portals.yml) в свой `portals.yml` и замените поисковые запросы. Источник выбирается через `ru_market.source`: `all`, `hh`, `habr-career`, `geekjob`, `superjob` или `trudvsem`. Новые источники выключены по умолчанию; для `source: all` включите `sources.superjob.enabled` или `sources.trudvsem.enabled`. Для SuperJob задайте `SUPERJOB_API_KEY` в `.env` приложения career-ops. Настройка доступа к HH описана в [docs/hh.md](docs/hh.md).
+Добавьте запись из [примера](examples/portals.yml) в свой `portals.yml` и замените поисковые запросы. Источник выбирается через `ru_market.source`: `all`, `hh`, `habr-career`, `geekjob`, `superjob`, `trudvsem` или `getmatch`. Новые источники выключены по умолчанию; для `source: all` включите `sources.superjob.enabled` или `sources.trudvsem.enabled`. getmatch подключается отдельно через `sources.getmatch.enabled: true`; ограничения экспериментального адаптера описаны в [docs/getmatch.md](docs/getmatch.md). Для SuperJob задайте `SUPERJOB_API_KEY` в `.env` приложения career-ops. Настройка доступа к HH описана в [docs/hh.md](docs/hh.md).
 
 **SuperJob:** на 30 сентября 2026 года консоль разработчика некорректно проводит OAuth2-сценарий, из-за чего нам пока не удалось нормально зарегистрировать приложение и получить Secret key для живой проверки. Для публичного поиска вакансий плагину нужен именно Secret key приложения, а не пользовательский OAuth2-токен ([документация API](https://api.superjob.ru/)).
 
@@ -41,3 +41,5 @@ CAREER_OPS_ROOT=../career-ops npm run test:integration
 - [ ] Добавить мониторинг доступности SuperJob и «Работы России».
 
 Условия доступа к HH: [API](https://github.com/hhru/api), [условия сайта](https://hh.ru/article/33205). Порядок публикации и ручная установка по SHA описаны в [RELEASING.md](RELEASING.md).
+
+Браузерный поиск HH устанавливается отдельно в career-ops и запускается через `provider: local-parser`, используя Playwright из career-ops. Конфигурация и ограничения: [companion/README.md](companion/README.md). Это отдельный инструмент вне разрешений API-плагина; `hh.mode: auto` по-прежнему использует только API.

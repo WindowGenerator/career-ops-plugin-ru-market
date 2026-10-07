@@ -6,8 +6,8 @@ import { parseConfig } from '../lib/config.mjs';
 import { adapters } from '../index.mjs';
 import { categoryOf } from '../lib/errors.mjs';
 
-export async function checkHealth(ctx) {
-  const config = parseConfig({ ru_market: { source: 'all', max_pages: 1 } });
+export async function checkHealth(ctx, { source = 'all' } = {}) {
+  const config = parseConfig({ ru_market: { source, max_pages: 1, sources: source === 'getmatch' ? { getmatch: { enabled: true } } : {} } });
   const sources = await Promise.all(config.selected.map(async source => {
     try {
       // Exactly one listing request per source, with no retries or detail fetches.
@@ -21,16 +21,23 @@ export async function checkHealth(ctx) {
 async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
-    console.log('Usage: node scripts/health.mjs [--career-ops /path/to/career-ops]');
+    console.log('Usage: node scripts/health.mjs [--career-ops /path/to/career-ops] [--source all|getmatch]');
     return;
   }
-  if (args.length && (args.length !== 2 || args[0] !== '--career-ops')) throw new Error('Invalid health arguments');
-  const core = resolve(args[1] ?? '../career-ops');
+  let corePath = '../career-ops';
+  let source = 'all';
+  for (let i = 0; i < args.length; i += 2) {
+    if (!args[i + 1]) throw new Error('Missing health option value');
+    if (args[i] === '--career-ops') corePath = args[i + 1];
+    else if (args[i] === '--source' && ['all', 'getmatch'].includes(args[i + 1])) source = args[i + 1];
+    else throw new Error('Invalid health arguments');
+  }
+  const core = resolve(corePath);
   // Reuse the existing guarded context; health must obey the same egress rules.
   const { buildCtx } = await import(pathToFileURL(resolve(core, 'plugins/_engine.mjs')).href);
   const manifest = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
   const ctx = buildCtx(manifest);
-  const result = await checkHealth({ ...ctx, log: () => {} });
+  const result = await checkHealth({ ...ctx, log: () => {} }, { source });
   console.log(JSON.stringify(result));
   process.exitCode = result.ok ? 0 : 1;
 }
