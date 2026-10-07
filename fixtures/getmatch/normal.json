@@ -1,0 +1,7 @@
+{
+  "meta": { "total": 2, "offset": 0, "limit": 1 },
+  "offers": [
+    { "id": 900, "offer_type": "one_day_offer_v3", "is_active": true },
+    { "id": 601, "offer_type": "vacancy", "is_active": true, "position": "Python Platform Engineer", "url": "/vacancies/601-python-platform-engineer?utm_source=fixture#details", "company": { "name": "Synthetic Platform" }, "location_items": [{ "label": "Россия", "format": "remote", "exclude": false }], "salary_hidden": false, "salary_by_our_version": false, "salary_display_from": 250000, "salary_display_to": 350000, "salary_currency": "RUB", "salary_description": "250000–350000 RUB", "salary_taxes": "net", "published_at": "2026-10-07T10:00:00+03:00", "description": "Synthetic description intentionally not copied", "application": { "private": true } }
+  ]
+}

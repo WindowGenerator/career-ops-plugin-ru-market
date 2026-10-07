@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 plugin_root="$(cd "$(dirname "$0")/.." && pwd)"
+(cd "$plugin_root" && sh test/companion-install.sh)
 core_root="${CAREER_OPS_ROOT:-$plugin_root/../career-ops}"
 core_root="$(cd "$core_root" && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/ru-market-integration.XXXXXX")"
@@ -21,6 +22,9 @@ job_boards:
     ru_market:
       source: all
       max_pages: 1
+      sources:
+        getmatch:
+          enabled: true
 YAML
 cat > preload.mjs <<'JS'
 import dns from 'node:dns/promises';
@@ -32,11 +36,11 @@ dns.lookup = async () => [{ address: '93.184.216.34', family: 4 }];
 syncBuiltinESMExports();
 globalThis.fetch = async value => {
   const url = new URL(value);
-  const source = { 'api.hh.ru': 'hh', 'career.habr.com': 'habr-career', 'geekjob.ru': 'geekjob' }[url.hostname];
+  const source = { 'api.hh.ru': 'hh', 'career.habr.com': 'habr-career', 'geekjob.ru': 'geekjob', 'getmatch.ru': 'getmatch' }[url.hostname];
   if (!source) throw new Error(`Unexpected integration request: ${url.hostname}`);
-  const ext = source === 'hh' ? 'json' : 'html';
+  const ext = ['hh', 'getmatch'].includes(source) ? 'json' : 'html';
   return new Response(readFileSync(`plugins.local/ru-market/fixtures/${source}/normal.${ext}`, 'utf8'), {
-    status: 200, headers: { 'content-type': source === 'hh' ? 'application/json' : 'text/html' },
+    status: 200, headers: { 'content-type': ['hh', 'getmatch'].includes(source) ? 'application/json' : 'text/html' },
   });
 };
 JS
@@ -55,5 +59,8 @@ assert.match(pipeline, /https:\/\/career.habr.com\/vacancies\/201/);
 assert.match(pipeline, /https:\/\/geekjob.ru\/vacancy\/000000000000000000000301/);
 assert.match(pipeline, /250000|250,000|250 000/);
 assert.match(history, /ru-market-api/);
+assert.match(pipeline, /https:\/\/getmatch.ru\/vacancies\/601-python-platform-engineer/);
+assert.match(history, /getmatch.ru/);
+assert(!pipeline.includes('Synthetic description intentionally not copied'));
 console.log('integration: scaffold, audit, consent, scan preview, pipeline and history OK');
 JS

@@ -33,4 +33,7 @@ jobs:
         run: |
           printf 'Release commit SHA: `%s`\n\n' "$(git rev-parse HEAD)" > release-notes.md
           cat RELEASE_NOTES.md >> release-notes.md
-          gh release create "$GITHUB_REF_NAME" ru-market.json install.sh update.sh --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          cp companion/scan-hh.mjs.txt scan-hh.mjs
+          prerelease_flag=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease_flag="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" ru-market.json install.sh update.sh scan-hh.mjs companion/local-parser.patch $prerelease_flag --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md

@@ -34,3 +34,8 @@ job_boards:
         trudvsem:
           enabled: false
           queries: [Python backend]
+        getmatch:
+          enabled: false # experimental; list only, no server-side text search
+          mode: api
+          max_pages: 1
+          per_page: 20

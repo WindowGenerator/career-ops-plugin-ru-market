@@ -1,3 +1,22 @@
+## 0.4.0-rc.1 — HH browser companion and experimental getmatch
+
+- Added an optional sixth source `getmatch` through the existing ru-market provider.
+  Disabled by default; reads listing metadata only, excludes promotions/archive,
+  preserves territorial remote restrictions and omits ambiguous timestamps.
+- Pagination follows metadata and can continue through filtered pages. Repeated
+  IDs/offsets produce explicit failures or partial results. Dedup uses numeric ID.
+- Added `getmatch.ru` to declared hosts; upgrading the plugin may require renewed
+  host consent through career-ops. Requests are restricted to `/api/offers`.
+- Health only checks getmatch with explicit `--source getmatch`. Fixtures and
+  integration are synthetic/offline; live pagination and usage conditions remain
+  unverified. getmatch remains experimental in this prerelease.
+
+- Added a separately installed HH browser companion using career-ops Playwright.
+  Release installers protect local companion edits and apply the reviewed
+  local-parser metadata extension only when its patch applies cleanly.
+- HH live check: two pages, 40 unique vacancies, 11 salaries. Core extension
+  committed locally as `e04e21ee`; the release carries the provider patch.
+
 ## 0.3.1
 
 Исправлена пагинация «Работы России»: параметр `offset` означает номер

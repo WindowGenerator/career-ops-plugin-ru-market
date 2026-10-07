@@ -1,0 +1,119 @@
+#!/usr/bin/env node
+// Public HH search via Playwright. JSON on stdout; no pipeline/tracker writes.
+import { chromium } from 'playwright';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { isMainModule } from '../../lib/is-main-module.mjs';
+
+export async function extractHhJobs(page) {
+  return page.locator('[data-qa="vacancy-serp__vacancy"]').evaluateAll(cards => {
+    const text = (card, selector) => card.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    return cards.flatMap(card => {
+      const link = card.querySelector('[data-qa="serp-item__title"], [data-qa="vacancy-serp__vacancy-title"]');
+      if (!link) return [];
+      const url = new URL(link.href);
+      if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hostname !== 'hh.ru' || !/^\/vacancy\/\d+\/?$/.test(url.pathname)) return [];
+      const title = link.textContent?.replace(/\s+/g, ' ').trim();
+      if (!title) return [];
+      const currency = [...card.querySelectorAll('data[value]')].find(el => /^(RUB|USD|EUR|KZT|BYN|UZS|GEL|AMD)$/.test(el.value));
+      const salaryText = text(card, '[data-qa="vacancy-serp__vacancy-compensation"], [data-qa="vacancy-serp__compensation"]')
+        || currency?.parentElement.textContent.replace(/\s+/g, ' ').trim() || '';
+      // Do not infer monthly pay from hourly/per-shift or unspecified periods.
+      let salary;
+      if (/в месяц|за месяц/i.test(salaryText) && !/\d[.,]\d|тыс|\d\s*[kк]\b/i.test(salaryText)) {
+        const values = [...salaryText.matchAll(/\d+(?:[ \u00a0]\d{3})*/g)].map(m => Number(m[0].replace(/\s/g, '')));
+        const currencyCode = currency?.value;
+        if (currencyCode && values.length >= 1 && values.length <= 2) {
+          salary = values.length === 2 ? { from: values[0], to: values[1], currency: currencyCode }
+            : /(?:^|\s)до\s/i.test(salaryText) ? { to: values[0], currency: currencyCode }
+            : /(?:^|\s)от\s/i.test(salaryText) ? { from: values[0], currency: currencyCode }
+            : { from: values[0], to: values[0], currency: currencyCode };
+          if (salary.from > salary.to) salary = undefined;
+        }
+      }
+      const remote = !!card.querySelector('[data-qa="vacancy-label-work-schedule-remote"]');
+      return [{ title, url: `https://hh.ru${url.pathname.replace(/\/$/, '')}`,
+        company: text(card, '[data-qa="vacancy-serp__vacancy-employer-text"], [data-qa="vacancy-serp__vacancy-employer"]'),
+        location: [text(card, '[data-qa="vacancy-serp__vacancy-address"]'), remote ? 'Можно удалённо' : ''].filter(Boolean).join(' / '),
+        salaryText, ...(salary ? { salary } : {}), note: `source: hh; transport: playwright${salaryText ? '; salary: ' + salaryText : ''}` }];
+    });
+  });
+}
+
+export async function searchHh({ query, pages = 1, area, titleOnly = false, channel = 'chrome', headed = false, launch = options => chromium.launch(options) }) {
+  if (!query?.trim()) throw new Error('A non-empty --query is required');
+  if (!Number.isInteger(pages) || pages < 1 || pages > 20) throw new Error('--pages must be an integer between 1 and 20');
+  const browser = await launch({ headless: !headed, ...(channel === 'chromium' ? {} : { channel }) });
+  const jobs = new Map();
+  let completedPages = 0;
+  let failure;
+  try {
+    const page = await browser.newPage({ locale: 'ru-RU' });
+    for (let index = 0; index < pages; index++) {
+      const url = new URL('https://hh.ru/search/vacancy');
+      url.searchParams.set('text', query);
+      url.searchParams.set('page', String(index));
+      if (area) url.searchParams.set('area', String(area));
+      if (titleOnly) url.searchParams.set('search_field', 'name');
+      try {
+        const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        if (!response?.ok()) throw new Error(`HH search HTTP ${response?.status() ?? 'unknown'} (page ${index + 1})`);
+        // Wait for cards, an explicit empty result, or an access challenge.
+        await page.waitForFunction(() => document.querySelector('[data-qa="serp-item__title"], [data-qa="vacancy-serp__vacancy-title"]')
+          || /ничего не найдено|не нашли|проверка.*человек|подтвердите.*человек|captcha|access denied/i.test(document.body.innerText), null, { timeout: 15000 });
+        const body = await page.locator('body').innerText();
+        if (/captcha|access denied|проверка.*человек|подтвердите.*человек/i.test(body)) {
+          throw new Error('HH access challenge: search stopped');
+        }
+        const found = await extractHhJobs(page);
+        if (!found.length && !/ничего не найдено|не нашли/i.test(body)) throw new Error('HH markup changed: no recognizable vacancy cards');
+        for (const job of found) jobs.set(job.url, job);
+        completedPages++;
+        console.error(`HH page ${index + 1}: ${found.length} vacancies`);
+        if (!found.length || !await page.locator('[data-qa="pager-next"]').count()) break;
+        if (index + 1 < pages) await page.waitForTimeout(1000);
+      } catch (error) {
+        if (!completedPages) throw error;
+        failure = { failed_page: index + 1, category: /HTTP 40[13]|challenge/i.test(error.message) ? 'access' : /timeout/i.test(error.message) ? 'network' : 'broken-markup' };
+        break;
+      }
+    }
+    return { source: 'hh', transport: 'playwright', query, completedPages, count: jobs.size, jobs: [...jobs.values()],
+      sourceStatuses: [{ source: 'hh', transport: 'playwright', status: failure ? 'partial' : 'ok', completed_pages: completedPages, count: jobs.size, ...failure }] };
+  } finally {
+    await browser.close();
+  }
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  if (args.includes('--help')) {
+    console.log('Usage: node scan-hh.mjs --query "Senior Python" [--pages 2] [--area 1] [--title-only] [--channel chrome|chromium] [--headed] [--output path.json]');
+    return;
+  }
+  const options = {};
+  const values = { '--query': 'query', '--pages': 'pages', '--area': 'area', '--channel': 'channel', '--output': 'output' };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--headed') options.headed = true;
+    else if (arg === '--title-only') options.titleOnly = true;
+    else if (values[arg]) {
+      if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`${arg} requires a value`);
+      options[values[arg]] = args[++i];
+    } else throw new Error(`Unknown argument: ${arg}`);
+  }
+  if (options.pages !== undefined) options.pages = Number(options.pages);
+  const result = await searchHh(options);
+  const json = JSON.stringify(result, null, 2) + '\n';
+  if (options.output) {
+    const output = resolve(options.output);
+    mkdirSync(dirname(output), { recursive: true });
+    writeFileSync(output, json);
+  }
+  process.stdout.write(json);
+}
+
+if (isMainModule(import.meta.url)) main().catch(error => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
