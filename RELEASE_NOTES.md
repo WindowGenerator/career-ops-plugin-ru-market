@@ -1,3 +1,11 @@
+## 0.4.1
+
+- Removed the ripgrep dependency from installer verification so integration
+  runs on standard GitHub Ubuntu runners. The stable 0.4.0 tag did not publish
+  a release because the new integration gate caught this missing tool.
+- Includes the HH companion, optional getmatch source and release checks
+  described below.
+
 ## 0.4.0 — HH browser companion and optional getmatch
 
 - Added an optional sixth source `getmatch` through the existing ru-market provider.
