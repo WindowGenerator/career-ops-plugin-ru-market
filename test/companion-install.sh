@@ -27,7 +27,11 @@ for script in install.sh update.sh; do
   sed 's/__RELEASE_SHA__/0123456789012345678901234567890123456789/g' "$plugin_root/$script" > "$test_root/$script"
 done
 cd "$test_root"
-git apply --reverse "$HH_PATCH_FIXTURE"
+if git apply --reverse --check "$HH_PATCH_FIXTURE" 2>/dev/null; then
+  git apply --reverse "$HH_PATCH_FIXTURE"
+else
+  git apply --check "$HH_PATCH_FIXTURE"
+fi
 sh install.sh
 cmp scripts/ru-market/scan-hh.mjs "$HH_INSTALL_FIXTURE"
 sh update.sh

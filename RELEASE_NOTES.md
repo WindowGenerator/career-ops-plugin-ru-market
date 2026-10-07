@@ -1,4 +1,4 @@
-## 0.4.0-rc.1 — HH browser companion and experimental getmatch
+## 0.4.0 — HH browser companion and optional getmatch
 
 - Added an optional sixth source `getmatch` through the existing ru-market provider.
   Disabled by default; reads listing metadata only, excludes promotions/archive,
@@ -9,13 +9,18 @@
   host consent through career-ops. Requests are restricted to `/api/offers`.
 - Health only checks getmatch with explicit `--source getmatch`. Fixtures and
   integration are synthetic/offline; live pagination and usage conditions remain
-  unverified. getmatch remains experimental in this prerelease.
+  unverified. getmatch remains opt-in with an experimental API contract.
 
 - Added a separately installed HH browser companion using career-ops Playwright.
   Release installers protect local companion edits and apply the reviewed
   local-parser metadata extension only when its patch applies cleanly.
 - HH live check: two pages, 40 unique vacancies, 11 salaries. Core extension
   committed locally as `e04e21ee`; the release carries the provider patch.
+
+- Fixed installer tests for clean and already-patched career-ops checkouts.
+  CI now pins career-ops 1.34.0 at `8c9aae34244ec2f79d1d21c05a34c5de608e7747`.
+- Release publication requires the Node 18/22/24 matrix and integration checks
+  to pass through the same reusable workflow as normal pushes.
 
 ## 0.3.1
 

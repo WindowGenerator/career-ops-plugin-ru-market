@@ -1,5 +1,8 @@
 name: Offline tests
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -22,8 +25,8 @@ jobs:
           path: plugin
       - uses: actions/checkout@v4
         with:
-          repository: santifer/career-ops
-          ref: 92dea48b209a9791b884e2a19ee111d0e2f098f0
+          repository: career-ops-hq/career-ops
+          ref: 8c9aae34244ec2f79d1d21c05a34c5de608e7747
           path: career-ops
       - uses: actions/setup-node@v4
         with:
