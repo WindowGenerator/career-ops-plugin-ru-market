@@ -1,7 +1,7 @@
 {
   "id": "ru-market",
   "name": "ru-market",
-  "version": "0.4.0-rc.1",
+  "version": "0.4.0",
   "apiVersion": 1,
   "description": "Discover public Russian-language vacancies across HH, Habr Career, GeekJob, SuperJob, Работа России and optional getmatch.",
   "hooks": ["provider"],
