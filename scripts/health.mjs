@@ -22,6 +22,7 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
     console.log('Usage: node scripts/health.mjs [--career-ops /path/to/career-ops] [--source all|getmatch]');
+    console.log('Separate browser preflight (from career-ops): node scripts/ru-market/scan-hh.mjs --preflight --channel chrome; use --version for tool identity.');
     return;
   }
   let corePath = '../career-ops';

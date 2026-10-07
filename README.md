@@ -43,3 +43,19 @@ CAREER_OPS_ROOT=../career-ops npm run test:integration
 Условия доступа к HH: [API](https://github.com/hhru/api), [условия сайта](https://hh.ru/article/33205). Порядок публикации и ручная установка по SHA описаны в [RELEASING.md](RELEASING.md).
 
 Браузерный поиск HH устанавливается отдельно в career-ops и запускается через `provider: local-parser`, используя Playwright из career-ops. Конфигурация и ограничения: [companion/README.md](companion/README.md). Это отдельный инструмент вне разрешений API-плагина; `hh.mode: auto` по-прежнему использует только API.
+
+### Reproducible HH browser batches
+
+The separate companion now collects configured queries, merges provenance, checkpoints
+progress, and generates an HH-only cache import config. From career-ops:
+
+```sh
+node scripts/ru-market/scan-hh.mjs --config portals.yml --entry NAME --artifact-dir data/scan-output/hh-run --scan --dry-run
+```
+
+See [the batch workflow and compensation contract](companion/README.md),
+[standalone configuration](examples/hh-browser.yml) and
+[cache provider example](examples/hh-browser-cache.yml). Browser health is
+`node scripts/ru-market/scan-hh.mjs --preflight`; version is `--version`.
+The core contract patch preserves monthly/hourly/shift units and gross/net basis,
+query diagnostics and listing completeness. DOM and isolated pipeline checks: `npm run test:dom`.

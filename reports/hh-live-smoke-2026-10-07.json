@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-07",
+  "contractVersion": 2,
+  "toolVersion": "0.5.0",
+  "sourceStatuses": [
+    {
+      "source": "hh",
+      "transport": "playwright",
+      "query": "Senior Python",
+      "queryId": "q01-9a77d310",
+      "completed_pages": 2,
+      "count": 40,
+      "status": "ok",
+      "stop_reason": "page-limit"
+    }
+  ],
+  "uniqueJobs": 40,
+  "withCompensation": 11,
+  "pipelineImported": false,
+  "rawArtifact": "/tmp/ru-market-hh-live-2026-10-07.json"
+}

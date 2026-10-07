@@ -1,0 +1,150 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import { searchHh, collectBatch, mergeJobs, loadBatchConfig, extractHhJobs, readCache } from '../scripts/ru-market/scan-hh.mjs';
+import { parseCompensation } from '../providers/_compensation.mjs';
+const baseJob = { title: 'Python', url: 'https://hh.ru/vacancy/1', company: 'Fixture', locationText: 'Москва', remote: true, salaryText: 'от 200 000 ₽ в месяц до вычета налогов', currency: 'RUB' };
+function harness({ failPage, challenge = false, empty = false, changed = false, launchFailure = false, unknown = false } = {}) {
+  let closed = false, contexts = 0, launches = 0, requests = 0;
+  const makePage = () => {
+    let index = 0;
+    return {
+      async goto() { index++; requests++; if (index === failPage) { if (unknown) throw new Error('unexpected'); return { ok: () => false, status: () => 403 }; } return { ok: () => true }; },
+      async waitForFunction() {}, async waitForTimeout() {}, async close() {},
+      locator(selector) { return {
+        async innerText() { return challenge ? 'captcha' : empty ? 'ничего не найдено' : 'Jobs'; },
+        async count() { return selector.includes('pager-next') ? 1 : selector.includes('no-results') ? Number(empty) : 1; },
+        async evaluateAll() { return empty || changed ? [] : [structuredClone(baseJob)]; }
+      }; }
+    };
+  };
+  const context = { newPage: async () => makePage(), close: async () => {} };
+  return { launch: async () => { launches++; if (launchFailure) throw new Error('bad launch'); return { newContext: async () => { contexts++; return context; }, close: async () => { closed = true; } }; },
+    state: () => ({ closed, launches, contexts, requests }) };
+}
+test('leading salary bound is independent of tax prose and periods remain explicit', () => {
+  assert.deepEqual(parseCompensation('от 200 000 ₽ в месяц до вычета налогов'), { min: 200000, currency: 'RUB', period: 'month', taxBasis: 'gross', rawText: 'от 200 000 ₽ в месяц до вычета налогов' });
+  assert.equal(parseCompensation('до 200 000 ₽ в месяц на руки').max, 200000);
+  assert.equal(parseCompensation('200 000–350 000 ₽ в месяц на руки').min, 200000);
+  assert.equal(parseCompensation('200\u00a0000 ₽ за месяц').min, 200000);
+  assert.equal(parseCompensation('200\u202f000 ₽ за месяц').min, 200000);
+  assert.equal(parseCompensation('от 200 тыс. ₽ за смену').min, 200000);
+  assert.equal(parseCompensation('1,5k USD per hour').min, 1500);
+  assert.equal(parseCompensation('350 000–200 000 ₽ в месяц').min, undefined);
+  assert.equal(parseCompensation('200 000 BTC за неделю').min, undefined);
+  assert.equal(parseCompensation('200 000 RUB за неделю').min, undefined);
+});
+test('machine result handles first-page failure, partial, empty, markup and unknown', async () => {
+  for (const options of [{ failPage: 1 }, { failPage: 2 }, { challenge: true }, { empty: true }, { changed: true }, { failPage: 1, unknown: true }, { launchFailure: true }]) {
+    const h = harness(options), r = await searchHh({ query: 'Python', pages: 2, launch: h.launch });
+    const s = r.sourceStatuses[0];
+    assert.equal(s.status, options.empty ? 'ok' : options.failPage === 2 ? 'partial' : 'failed');
+    assert.equal(s.category, options.empty ? undefined : options.changed ? 'broken-markup' : options.launchFailure ? 'browser-launch' : options.unknown ? 'unknown' : 'access');
+    assert.equal(s.query, 'Python'); assert(s.queryId);
+    if (!options.launchFailure) assert(h.state().closed);
+  }
+  const invalid = await searchHh({ query: 'Python', pages: 21, launch: harness().launch });
+  assert.equal(invalid.sourceStatuses[0].category, 'invalid-config');
+  assert.equal((await searchHh({})).sourceStatuses[0].category, 'invalid-config');
+});
+test('page limit and exhaustion remain distinct from full coverage', async () => {
+  const h = harness(), r = await searchHh({ query: 'Python', pages: 2, launch: h.launch });
+  assert.equal(r.jobs.length, 1); assert.equal(r.sourceStatuses[0].completed_pages, 2); assert.equal(r.sourceStatuses[0].stop_reason, 'page-limit');
+  assert.equal(r.jobs[0].eligibility.status, 'unknown'); assert.equal(r.jobs[0].hasDescription, false);
+  assert.equal(r.jobs[0].compensation.min, 200000);
+});
+test('merge preserves matched queries, complete fields and conflicting observations', () => {
+  const a = { ...baseJob, matchedQueries: [{ query: 'Python', queryId: 'a' }] };
+  const b = { ...baseJob, company: '', matchedQueries: [{ query: 'Backend', queryId: 'b' }] };
+  const c = { ...baseJob, company: 'Different', matchedQueries: [{ query: 'Senior', queryId: 'c' }] };
+  const [job] = mergeJobs([a, b, c]); assert.equal(job.company, 'Fixture'); assert.equal(job.matchedQueries.length, 3);
+  assert.equal(job.provenance.conflicts[0].field, 'company');
+});
+test('batch reuses anonymous context, blocks remaining queries and validates resume', async () => {
+  const folder = mkdtempSync(resolve(tmpdir(), 'hh-batch-test-'));
+  try {
+    const h = harness(), config = { queries: ['Python', 'Backend'], pages: 1, artifactDir: folder, launch: h.launch, wait: async () => {} };
+    const r = await collectBatch(config);
+    assert.equal(h.state().launches, 1); assert.equal(h.state().contexts, 1); assert(h.state().closed);
+    assert.equal(r.jobs[0].matchedQueries.length, 2); assert.equal(readCache(resolve(folder, 'merged.json')).jobs.length, 1);
+    const resumeHarness = harness();
+    await collectBatch({ ...config, resume: true, launch: resumeHarness.launch }); assert.equal(resumeHarness.state().launches, 0);
+    await assert.rejects(collectBatch({ ...config, queries: ['Java'], resume: true }), /Resume parameters/);
+    const checkpoint = JSON.parse(readFileSync(resolve(folder, 'checkpoint.json')));
+    const id = Object.keys(checkpoint.queries)[0]; checkpoint.queries[id].status = 'running';
+    writeFileSync(resolve(folder, 'checkpoint.json'), JSON.stringify(checkpoint));
+    const resumed = harness(); await collectBatch({ ...config, pages: 1, resume: true, launch: resumed.launch });
+    assert.equal(resumed.state().launches, 1);
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+  const blockedFolder = mkdtempSync(resolve(tmpdir(), 'hh-block-test-'));
+  try { const h = harness({ challenge: true }); const r = await collectBatch({ queries: ['Python', 'Backend'], artifactDir: blockedFolder, launch: h.launch, wait: async () => {} });
+    assert.equal(r.sourceStatuses[0].status, 'failed'); assert.equal(r.sourceStatuses[1].status, 'skipped'); assert.equal(h.state().requests, 1);
+  } finally { rmSync(blockedFolder, { recursive: true, force: true }); }
+});
+test('explicit config and data root select HH queries without changing source config', async () => {
+  const root = mkdtempSync(resolve(tmpdir(), 'hh-config-test-'));
+  try { writeFileSync(resolve(root, 'portals.yml'), 'title_filter:\n  positive: [Python]\njob_boards:\n  - name: Selected\n    ru_market:\n      max_pages: 2\n      sources:\n        hh:\n          queries: [Python, Backend]\n');
+    const c = await loadBatchConfig('portals.yml', 'Selected', root);
+    assert.equal(c.pages, 2); assert.equal(c.queries.length, 2); assert.equal(c.scannerConfig.title_filter.positive[0], 'Python');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+if (process.env.HH_TEST_DOM === '1') test('real DOM extraction -> local-parser -> period/tax filter -> pipeline receipt and repeat import', async () => {
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ ...(process.env.HH_BROWSER_CHANNEL === 'chrome' ? { channel: 'chrome' } : {}), headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent(readFileSync(process.env.HH_DOM_FIXTURE, 'utf8'));
+    const jobs = await extractHhJobs(page, { query: 'Python', queryId: 'dom' });
+    assert.equal(jobs.length, 9); assert.equal(jobs[0].compensation.min, 200000); assert.equal(jobs[0].compensation.max, undefined);
+    assert.equal(jobs[0].compensation.taxBasis, 'gross'); assert.equal(jobs[1].compensation.max, 200000); assert.equal(jobs[2].compensation.max, 350000);
+    assert.equal(jobs[3].compensation.min, 200000); assert.equal(jobs[4].compensation, undefined);
+    assert.equal(jobs[5].compensation.period, 'hour'); assert.equal(jobs[6].compensation.period, 'shift');
+    assert.equal(jobs[7].compensation.min, undefined); assert.equal(jobs[8].compensation.min, undefined);
+    if (process.env.HH_CORE_TEST) {
+      const core = process.env.HH_CORE_TEST;
+      const { default: parser } = await import(resolve(core, 'providers/local-parser.mjs'));
+      const scanner = await import(resolve(core, 'scan.mjs'));
+      writeFileSync(resolve(core, 'scripts/ru-market/dom-jobs.json'), JSON.stringify({ jobs, sourceStatuses: [{ source: 'hh', transport: 'playwright', query: 'Python', queryId: 'dom', status: 'ok', completed_pages: 1, count: jobs.length }] }));
+      writeFileSync(resolve(core, 'scripts/ru-market/dom-import.mjs'), "import fs from 'node:fs'; console.log(fs.readFileSync(new URL('./dom-jobs.json', import.meta.url), 'utf8'));\n");
+      const entry = { parser: { command: 'node', script: 'scripts/ru-market/dom-import.mjs' } };
+      const normalized = await parser.fetch(entry);
+      assert.deepEqual(normalized[0].compensation, jobs[0].compensation);
+      assert.equal(normalized[0].matchedQueries[0].queryId, 'dom');
+      assert.equal(scanner.buildSalaryFilter({ min: 210000, period: 'month', taxBasis: 'gross', currency: 'RUB' })(undefined, normalized[0].compensation), true); // lower-only range can exceed threshold
+      assert.equal(scanner.buildSalaryFilter({ max: 190000, period: 'month', taxBasis: 'gross', currency: 'RUB' })(undefined, normalized[0].compensation), false);
+      assert.equal(scanner.buildSalaryFilter({ min: 300000, period: 'month', taxBasis: 'net', currency: 'RUB' })(undefined, normalized[1].compensation), false);
+      assert.equal(scanner.buildSalaryFilter({ min: 300000, period: 'year', taxBasis: 'gross', currency: 'RUB' })(undefined, normalized[0].compensation), true);
+      assert.equal(scanner.buildSalaryFilter({ min: 300000, period: 'month', taxBasis: 'net', currency: 'RUB' })(undefined, normalized[0].compensation), true);
+      assert.match(scanner.formatPipelineOffer(normalized[0]), /from 200000 RUB \/ month \(gross\)/);
+      const { execFileSync } = await import('node:child_process');
+      const data = mkdtempSync(resolve(tmpdir(), 'hh-pipeline-test-'));
+      try {
+        const portals = resolve(data, 'portals.yml'); writeFileSync(portals, JSON.stringify({ title_filter: { positive: ['Python'] }, job_boards: [{ name: 'HH fixture', provider: 'local-parser', ...entry }] }));
+        const env = { ...process.env, CAREER_OPS_ROOT: data, CAREER_OPS_PORTALS: portals, CAREER_OPS_PIPELINE: resolve(data, 'pipeline.md'), CAREER_OPS_SCAN_HISTORY: resolve(data, 'history.tsv'), CAREER_OPS_PROFILE: resolve(data, 'profile.yml') };
+        const args = [resolve(core, 'scan.mjs'), '--json'];
+        const first = JSON.parse(execFileSync(process.execPath, args, { cwd: core, env, encoding: 'utf8' }));
+        assert.equal(first.source_statuses[0].queryId, 'dom');
+        assert.match(readFileSync(resolve(data, 'pipeline.md'), 'utf8'), /from 200000 RUB \/ month \(gross\)/);
+        const before = readFileSync(resolve(data, 'pipeline.md'), 'utf8');
+        execFileSync(process.execPath, args, { cwd: core, env }); assert.equal(readFileSync(resolve(data, 'pipeline.md'), 'utf8'), before);
+      } finally { rmSync(data, { recursive: true, force: true }); }
+    }
+  } finally { await browser.close(); }
+});
+
+test('batch --scan imports generated cache and preserves query identity in isolated receipt', async () => {
+  if (!process.env.HH_CORE_TEST) return;
+  const root = mkdtempSync(resolve(tmpdir(), 'hh-batch-scan-'));
+  try {
+    const h = harness();
+    const r = await collectBatch({ queries: ['Python', 'Backend'], pages: 1, dataRoot: root, artifactDir: 'artifacts', launch: h.launch, wait: async () => {}, scan: true, dryRun: true });
+    assert.equal(r.scanReceipt.source_statuses.length, 2);
+    assert.equal(r.scanReceipt.source_statuses[1].query, 'Backend');
+    assert.equal(r.scanReceipt.source_statuses[0].queryId, r.sourceStatuses[0].queryId);
+    assert.equal(r.scanReceipt.dry_run, true);
+    assert.equal(readFileSync(resolve(root, 'artifacts/scan-receipt.json'), 'utf8').includes('Backend'), true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

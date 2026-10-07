@@ -36,3 +36,7 @@ jobs:
         working-directory: career-ops
       - run: npm run test:integration
         working-directory: plugin
+      - run: npx playwright install --with-deps chromium
+        working-directory: career-ops
+      - run: npm run test:dom
+        working-directory: plugin

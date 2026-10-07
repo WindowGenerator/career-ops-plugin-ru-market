@@ -1,0 +1,10 @@
+job_boards:
+  - name: HH browser cache
+    provider: local-parser
+    careers_url: https://hh.ru/search/vacancy
+    parser:
+      command: node
+      script: scripts/ru-market/scan-hh.mjs
+      args: [--import-cache, /absolute/path/to/merged.json]
+      timeout_ms: 20000
+      max_buffer_bytes: 10000000

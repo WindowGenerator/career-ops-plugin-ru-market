@@ -1,119 +1,297 @@
 #!/usr/bin/env node
-// Public HH search via Playwright. JSON on stdout; no pipeline/tracker writes.
-import { chromium } from 'playwright';
-import { writeFileSync, mkdirSync } from 'node:fs';
+// Canonical HH listing collector. Anonymous browser; pipeline writes stay in core.
+import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { isMainModule } from '../../lib/is-main-module.mjs';
+import { getCareerOpsRoot } from '../../path-resolver.mjs';
+import { parseCompensation } from '../../providers/_compensation.mjs';
+export const TOOL_VERSION = '0.5.0';
+export const CONTRACT_VERSION = 2;
+const clean = s => typeof s === 'string' ? s.replace(/\s+/gu, ' ').trim() : '';
+const diagnostic = (category, message, extra = {}) => Object.assign(new Error(message), { category, ...extra });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const atomicJson = (path, value) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path + '.tmp', JSON.stringify(value, null, 2) + '\n'); renameSync(path + '.tmp', path); };
+const queryId = (query, index = 0) => `q${String(index + 1).padStart(2, '0')}-${createHash('sha256').update(query).digest('hex').slice(0, 8)}`;
 
-export async function extractHhJobs(page) {
-  return page.locator('[data-qa="vacancy-serp__vacancy"]').evaluateAll(cards => {
-    const text = (card, selector) => card.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim() || '';
+export async function extractHhJobs(page, identity = {}) {
+  const raw = await page.locator('[data-qa="vacancy-serp__vacancy"]').evaluateAll(cards => {
+    const text = (card, selector) => card.querySelector(selector)?.textContent?.replace(/\s+/gu, ' ').trim() || '';
     return cards.flatMap(card => {
       const link = card.querySelector('[data-qa="serp-item__title"], [data-qa="vacancy-serp__vacancy-title"]');
       if (!link) return [];
-      const url = new URL(link.href);
-      if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hostname !== 'hh.ru' || !/^\/vacancy\/\d+\/?$/.test(url.pathname)) return [];
-      const title = link.textContent?.replace(/\s+/g, ' ').trim();
+      let url;
+      try { url = new URL(link.getAttribute('href'), document.baseURI); } catch { return []; }
+      if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hostname !== 'hh.ru' || !/^\/vacancy\/[1-9]\d*\/?$/.test(url.pathname)) return [];
+      const title = link.textContent?.replace(/\s+/gu, ' ').trim();
       if (!title) return [];
-      const currency = [...card.querySelectorAll('data[value]')].find(el => /^(RUB|USD|EUR|KZT|BYN|UZS|GEL|AMD)$/.test(el.value));
+      const currency = [...card.querySelectorAll('data[value]')].find(el => /^[A-Z]{3}$/.test(el.value));
       const salaryText = text(card, '[data-qa="vacancy-serp__vacancy-compensation"], [data-qa="vacancy-serp__compensation"]')
-        || currency?.parentElement.textContent.replace(/\s+/g, ' ').trim() || '';
-      // Do not infer monthly pay from hourly/per-shift or unspecified periods.
-      let salary;
-      if (/в месяц|за месяц/i.test(salaryText) && !/\d[.,]\d|тыс|\d\s*[kк]\b/i.test(salaryText)) {
-        const values = [...salaryText.matchAll(/\d+(?:[ \u00a0]\d{3})*/g)].map(m => Number(m[0].replace(/\s/g, '')));
-        const currencyCode = currency?.value;
-        if (currencyCode && values.length >= 1 && values.length <= 2) {
-          salary = values.length === 2 ? { from: values[0], to: values[1], currency: currencyCode }
-            : /(?:^|\s)до\s/i.test(salaryText) ? { to: values[0], currency: currencyCode }
-            : /(?:^|\s)от\s/i.test(salaryText) ? { from: values[0], currency: currencyCode }
-            : { from: values[0], to: values[0], currency: currencyCode };
-          if (salary.from > salary.to) salary = undefined;
-        }
-      }
+        || currency?.parentElement?.textContent?.replace(/\s+/gu, ' ').trim() || '';
       const remote = !!card.querySelector('[data-qa="vacancy-label-work-schedule-remote"]');
       return [{ title, url: `https://hh.ru${url.pathname.replace(/\/$/, '')}`,
         company: text(card, '[data-qa="vacancy-serp__vacancy-employer-text"], [data-qa="vacancy-serp__vacancy-employer"]'),
-        location: [text(card, '[data-qa="vacancy-serp__vacancy-address"]'), remote ? 'Можно удалённо' : ''].filter(Boolean).join(' / '),
-        salaryText, ...(salary ? { salary } : {}), note: `source: hh; transport: playwright${salaryText ? '; salary: ' + salaryText : ''}` }];
+        locationText: text(card, '[data-qa="vacancy-serp__vacancy-address"]'), remote, salaryText, currency: currency?.value }];
     });
+  });
+  return raw.map(item => {
+    const sourceId = /\/vacancy\/(\d+)/.exec(item.url)?.[1];
+    const compensation = parseCompensation(item.salaryText, item.currency);
+    return { title: item.title, url: item.url, company: item.company, source: 'hh', transport: 'playwright', sourceId,
+      locationText: item.locationText, locations: item.locationText ? [item.locationText] : [],
+      location: [item.locationText, item.remote ? 'Можно удалённо' : ''].filter(Boolean).join(' / '),
+      workArrangement: item.remote ? 'remote' : 'unknown', eligibility: { status: 'unknown' },
+      dataLevel: 'listing', hasDescription: false, matchedQueries: identity.query ? [{ query: identity.query, queryId: identity.queryId }] : [],
+      ...(compensation ? { compensation } : {}),
+      note: `source: hh; transport: playwright${item.salaryText ? '; salary: ' + item.salaryText : ''}` };
   });
 }
 
-export async function searchHh({ query, pages = 1, area, titleOnly = false, channel = 'chrome', headed = false, launch = options => chromium.launch(options) }) {
-  if (!query?.trim()) throw new Error('A non-empty --query is required');
-  if (!Number.isInteger(pages) || pages < 1 || pages > 20) throw new Error('--pages must be an integer between 1 and 20');
-  const browser = await launch({ headless: !headed, ...(channel === 'chromium' ? {} : { channel }) });
-  const jobs = new Map();
-  let completedPages = 0;
-  let failure;
-  try {
-    const page = await browser.newPage({ locale: 'ru-RU' });
-    for (let index = 0; index < pages; index++) {
-      const url = new URL('https://hh.ru/search/vacancy');
-      url.searchParams.set('text', query);
-      url.searchParams.set('page', String(index));
-      if (area) url.searchParams.set('area', String(area));
-      if (titleOnly) url.searchParams.set('search_field', 'name');
-      try {
-        const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        if (!response?.ok()) throw new Error(`HH search HTTP ${response?.status() ?? 'unknown'} (page ${index + 1})`);
-        // Wait for cards, an explicit empty result, or an access challenge.
-        await page.waitForFunction(() => document.querySelector('[data-qa="serp-item__title"], [data-qa="vacancy-serp__vacancy-title"]')
-          || /ничего не найдено|не нашли|проверка.*человек|подтвердите.*человек|captcha|access denied/i.test(document.body.innerText), null, { timeout: 15000 });
-        const body = await page.locator('body').innerText();
-        if (/captcha|access denied|проверка.*человек|подтвердите.*человек/i.test(body)) {
-          throw new Error('HH access challenge: search stopped');
-        }
-        const found = await extractHhJobs(page);
-        if (!found.length && !/ничего не найдено|не нашли/i.test(body)) throw new Error('HH markup changed: no recognizable vacancy cards');
-        for (const job of found) jobs.set(job.url, job);
-        completedPages++;
-        console.error(`HH page ${index + 1}: ${found.length} vacancies`);
-        if (!found.length || !await page.locator('[data-qa="pager-next"]').count()) break;
-        if (index + 1 < pages) await page.waitForTimeout(1000);
-      } catch (error) {
-        if (!completedPages) throw error;
-        failure = { failed_page: index + 1, category: /HTTP 40[13]|challenge/i.test(error.message) ? 'access' : /timeout/i.test(error.message) ? 'network' : 'broken-markup' };
-        break;
+export function mergeJobs(jobs) {
+  const merged = new Map();
+  for (const job of jobs) {
+    const previous = merged.get(job.url);
+    if (!previous) { merged.set(job.url, structuredClone(job)); continue; }
+    const queries = new Map([...(previous.matchedQueries ?? []), ...(job.matchedQueries ?? [])].map(q => [q.queryId, q]));
+    previous.matchedQueries = [...queries.values()];
+    for (const key of ['title', 'company', 'locationText', 'compensation', 'workArrangement']) {
+      const old = previous[key], next = job[key];
+      const empty = value => value == null || value === '' || value === 'unknown';
+      if (empty(old) && !empty(next)) { previous[key] = structuredClone(next); if (key === 'locationText') { previous.location = job.location; previous.locations = job.locations; } }
+      else if (!empty(old) && !empty(next) && JSON.stringify(old) !== JSON.stringify(next)) {
+        previous.provenance ??= { conflicts: [] };
+        const conflict = { field: key, retained: old, observed: next, matchedQueries: job.matchedQueries ?? [] };
+        if (!previous.provenance.conflicts.some(x => JSON.stringify(x) === JSON.stringify(conflict))) previous.provenance.conflicts.push(conflict);
       }
     }
-    return { source: 'hh', transport: 'playwright', query, completedPages, count: jobs.size, jobs: [...jobs.values()],
-      sourceStatuses: [{ source: 'hh', transport: 'playwright', status: failure ? 'partial' : 'ok', completed_pages: completedPages, count: jobs.size, ...failure }] };
-  } finally {
-    await browser.close();
   }
+  return [...merged.values()];
+}
+
+export function validateOptions(options) {
+  if (!clean(options.query) || clean(options.query).length > 512) throw diagnostic('invalid-config', 'A query of 1..512 characters is required');
+  if (!Number.isInteger(options.pages) || options.pages < 1 || options.pages > 20) throw diagnostic('invalid-config', 'pages must be an integer between 1 and 20');
+  if (options.area !== undefined && options.area !== '' && !/^[1-9]\d*$/.test(String(options.area))) throw diagnostic('invalid-config', 'area must be an HH numeric area ID');
+  if (!['chrome', 'chromium'].includes(options.channel)) throw diagnostic('invalid-config', 'channel must be chrome or chromium');
+  if (!Number.isInteger(options.retries) || options.retries < 0 || options.retries > 2) throw diagnostic('invalid-config', 'retries must be 0..2');
+  if (typeof options.titleOnly !== 'boolean' || typeof options.headed !== 'boolean') throw diagnostic('invalid-config', 'titleOnly and headed must be booleans');
+}
+export async function preflight({ channel = 'chrome', headed = false, launch } = {}) {
+  if (!['chrome', 'chromium'].includes(channel) || typeof headed !== 'boolean') throw diagnostic('invalid-config', 'Invalid browser channel or headed flag');
+  let chromium;
+  if (!launch) {
+    try { ({ chromium } = await import('playwright')); }
+    catch { throw diagnostic('browser-launch', 'Playwright is missing in career-ops; install career-ops dependencies.'); }
+    launch = options => chromium.launch(options);
+  }
+  try { return await launch({ headless: !headed, ...(channel === 'chromium' ? {} : { channel }) }); }
+  catch (error) {
+    const message = /Executable doesn't exist|not found|distribution.*not found/i.test(error.message)
+      ? `Selected browser ${channel} is missing; install Chrome or career-ops Playwright Chromium.`
+      : `Browser launch failed (${channel}); check environment/sandbox permissions. No sandbox settings were changed.`;
+    throw diagnostic('browser-launch', message);
+  }
+}
+function classify(error) {
+  return { category: error.category ?? (/Timeout|timeout|net::|ECONN|ENOTFOUND/i.test(`${error.name} ${error.message}`) ? 'network' : 'unknown'),
+    message: clean(error.category ? error.message : `${error.name || 'Error'} while collecting HH listings`).slice(0, 240),
+    ...(Number.isInteger(error.http_status) ? { http_status: error.http_status } : {}) };
+}
+const statusBase = options => ({ source: 'hh', transport: 'playwright', query: options.query, queryId: options.queryId ?? queryId(clean(options.query)), completed_pages: 0, count: 0 });
+const envelope = (jobs, statuses, extra = {}) => ({ contractVersion: CONTRACT_VERSION, toolVersion: TOOL_VERSION, jobs, sourceStatuses: statuses, ...extra });
+
+export async function searchHh(input) {
+  const options = { pages: 1, channel: 'chrome', titleOnly: false, headed: false, retries: 0, ...input };
+  const status = statusBase(options);
+  let browser, context, page, ownBrowser = false;
+  let jobs = input.initial?.jobs ?? [], start = input.initial?.completed_pages ?? 0;
+  status.completed_pages = start;
+  try {
+    validateOptions(options);
+    browser = input.browser ?? await preflight(options); ownBrowser = !input.browser;
+    context = input.context ?? (browser.newContext ? await browser.newContext({ locale: 'ru-RU', serviceWorkers: 'block' }) : browser);
+    page = await context.newPage();
+    for (let index = start; index < options.pages; index++) {
+      if (options.signal?.aborted) throw diagnostic('interrupted', 'Collection interrupted; resume from checkpoint');
+      const url = new URL('https://hh.ru/search/vacancy');
+      url.searchParams.set('text', options.query); url.searchParams.set('page', String(index));
+      if (options.area) url.searchParams.set('area', String(options.area));
+      if (options.titleOnly) url.searchParams.set('search_field', 'name');
+      let found, hasNext;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
+          if (!response?.ok()) {
+            const code = response?.status();
+            throw diagnostic([401, 403].includes(code) ? 'access' : 'http', `HH search HTTP ${code ?? 'unknown'}`, { http_status: code });
+          }
+          try {
+            await page.waitForFunction(() => document.querySelector('[data-qa="vacancy-serp__vacancy"], [data-qa="vacancy-serp__no-results"], [data-qa="vacancy-serp__empty"]')
+              || /ничего не найдено|вакансий не найдено|проверка.*человек|подтвердите.*человек|captcha|access denied/i.test(document.body.innerText), null, { timeout: 15000 });
+          } catch (error) {
+            if (error.name === 'TimeoutError') throw diagnostic('broken-markup', 'HH card, empty or challenge marker absent');
+            throw error;
+          }
+          const body = await page.locator('body').innerText();
+          if (/captcha|access denied|проверка.*человек|подтвердите.*человек/i.test(body)) throw diagnostic('access', 'HH access challenge; collection stopped');
+          found = await extractHhJobs(page, { query: options.query, queryId: status.queryId });
+          const explicitEmpty = /ничего не найдено|вакансий не найдено/i.test(body)
+            || await page.locator('[data-qa="vacancy-serp__no-results"], [data-qa="vacancy-serp__empty"]').count() > 0;
+          if (!found.length && !explicitEmpty) throw diagnostic('broken-markup', 'HH markup changed: no valid vacancy cards');
+          hasNext = found.length > 0 && await page.locator('[data-qa="pager-next"]').count() > 0;
+          break;
+        } catch (error) {
+          if (classify(error).category !== 'network' || attempt >= options.retries) throw error;
+          await sleep(500 * (attempt + 1));
+        }
+      }
+      jobs = mergeJobs([...jobs, ...found]); status.completed_pages++; status.count = jobs.length;
+      status.status = 'ok'; status.stop_reason = hasNext ? 'page-limit' : found.length ? 'exhausted' : 'empty';
+      await input.onCheckpoint?.({ jobs, ...status });
+      console.error(`HH ${status.queryId} page ${index + 1}: ${found.length} vacancies`);
+      if (!hasNext) break;
+      if (index + 1 < options.pages) await (page.waitForTimeout?.(1000) ?? sleep(1000));
+    }
+    status.status = 'ok'; status.stop_reason ??= 'page-limit';
+  } catch (error) {
+    Object.assign(status, { status: status.completed_pages ? 'partial' : 'failed', failed_page: status.completed_pages + 1, ...classify(error) });
+  } finally {
+    await page?.close?.().catch(() => {});
+    if (!input.context && context && context !== browser) await context.close().catch(() => {});
+    if (ownBrowser) await browser?.close().catch(() => {});
+  }
+  status.count = jobs.length;
+  return envelope(jobs, [status]);
+}
+
+export async function loadBatchConfig(path, entryName, dataRoot = getCareerOpsRoot()) {
+  const { load } = await import('js-yaml');
+  const file = resolve(dataRoot, path);
+  let data;
+  try { data = load(readFileSync(file, 'utf8')); } catch { throw diagnostic('invalid-config', 'Cannot read or parse selected YAML config'); }
+  if (!data || typeof data !== 'object') throw diagnostic('invalid-config', 'Config must be an object');
+  const scannerConfig = Object.fromEntries(Object.entries(data).filter(([key]) => !['hh_browser', 'job_boards', 'tracked_companies'].includes(key)));
+  if (data.hh_browser) return { ...data.hh_browser, scannerConfig, configFile: file };
+  const candidates = [...(data.job_boards ?? []), ...(data.tracked_companies ?? [])].filter(entry => entry.ru_market?.sources?.hh && (!entryName || entry.name === entryName));
+  if (candidates.length !== 1) throw diagnostic('invalid-config', 'Select one HH config entry with --entry, or provide hh_browser config');
+  const hh = candidates[0].ru_market.sources.hh;
+  return { queries: hh.queries, pages: hh.max_pages ?? candidates[0].ru_market.max_pages ?? 1, area: hh.area || undefined,
+    titleOnly: hh.title_only ?? false, channel: 'chrome', scannerConfig, configFile: file };
+}
+
+export async function collectBatch(input) {
+  const dataRoot = input.dataRoot ?? getCareerOpsRoot();
+  const options = { pages: 1, channel: 'chrome', titleOnly: false, headed: false, retries: 0, ...input };
+  if (!Array.isArray(options.queries) || !options.queries.length || options.queries.length > 100
+    || options.queries.some(q => typeof q !== 'string' || !clean(q))) throw diagnostic('invalid-config', 'queries must contain 1..100 non-empty strings');
+  options.queries = [...new Set(options.queries.map(clean))];
+  options.queries.forEach(query => validateOptions({ ...options, query }));
+  const folder = resolve(dataRoot, options.artifactDir ?? `data/scan-output/hh-${new Date().toISOString().slice(0, 10)}`);
+  const checkpointPath = resolve(folder, 'checkpoint.json');
+  const parameters = { queries: options.queries, pages: options.pages, area: options.area ?? '', titleOnly: options.titleOnly,
+    channel: options.channel, headed: options.headed, retries: options.retries };
+  const signature = createHash('sha256').update(JSON.stringify(parameters)).digest('hex');
+  let checkpoint = { contractVersion: CONTRACT_VERSION, toolVersion: TOOL_VERSION, signature, parameters, queries: {} };
+  if (existsSync(checkpointPath)) {
+    if (!options.resume) throw diagnostic('invalid-config', 'Artifacts already exist; choose a new folder or use --resume');
+    checkpoint = JSON.parse(readFileSync(checkpointPath, 'utf8'));
+    if (checkpoint.signature !== signature || checkpoint.contractVersion !== CONTRACT_VERSION) throw diagnostic('invalid-config', 'Resume parameters or contract version do not match checkpoint');
+  } else if (options.resume) throw diagnostic('invalid-config', 'No checkpoint to resume');
+  let browser, context, launchFailure, blocked = false;
+  const results = [];
+  const save = () => atomicJson(checkpointPath, checkpoint);
+  save();
+  try {
+    const pending = options.queries.some((query, i) => checkpoint.queries[queryId(query, i)]?.status !== 'ok');
+    if (pending) {
+      try { browser = await preflight(options); context = browser.newContext ? await browser.newContext({ locale: 'ru-RU', serviceWorkers: 'block' }) : browser; }
+      catch (error) { launchFailure = classify(error); }
+    }
+    for (const [index, query] of options.queries.entries()) {
+      const id = queryId(query, index), old = checkpoint.queries[id];
+      let result;
+      if (old?.status === 'ok') result = envelope(old.jobs, [{ ...old, jobs: undefined }]);
+      else if (blocked || options.signal?.aborted || launchFailure) {
+        const state = { ...statusBase({ query, queryId: id }), completed_pages: old?.completed_pages ?? 0, count: old?.jobs?.length ?? 0, status: launchFailure && !results.length ? 'failed' : 'skipped', category: blocked ? 'access' : options.signal?.aborted ? 'interrupted' : launchFailure.category,
+          message: blocked ? 'Skipped after HH access block' : options.signal?.aborted ? 'Collection interrupted' : launchFailure.message };
+        result = envelope(old?.jobs ?? [], [state]);
+      } else {
+        result = await searchHh({ ...options, query, queryId: id, browser, context, initial: old,
+          onCheckpoint: state => { checkpoint.queries[id] = { ...state, status: state.completed_pages >= options.pages || state.stop_reason !== 'page-limit' ? 'ok' : 'running' }; save(); } });
+      }
+      const status = result.sourceStatuses[0];
+      checkpoint.queries[id] = { ...status, jobs: result.jobs }; save();
+      atomicJson(resolve(folder, `query-${String(index + 1).padStart(2, '0')}.json`), result);
+      results.push(result);
+      if (status.category === 'access') blocked = true;
+      if (index + 1 < options.queries.length && !blocked && browser) await (options.wait ?? sleep)(1000);
+    }
+  } finally {
+    if (context && context !== browser) await context.close().catch(() => {});
+    await browser?.close().catch(() => {});
+  }
+  const result = envelope(mergeJobs(results.flatMap(r => r.jobs)), results.flatMap(r => r.sourceStatuses), { parameters, artifactDir: folder });
+  atomicJson(resolve(folder, 'merged.json'), result);
+  atomicJson(resolve(folder, 'queries-summary.json'), { ...result, jobs: undefined });
+  // Same executable imports the cache; no generated JavaScript adapters.
+  const portals = { ...options.scannerConfig, tracked_companies: [], job_boards: [{ name: 'HH browser cache', provider: 'local-parser', careers_url: 'https://hh.ru/search/vacancy',
+    parser: { command: 'node', script: 'scripts/ru-market/scan-hh.mjs', args: ['--import-cache', resolve(folder, 'merged.json')], timeout_ms: 20000, max_buffer_bytes: 10000000 } }] };
+  const { dump } = await import('js-yaml');
+  writeFileSync(resolve(folder, 'portals-hh.yml'), dump(portals));
+  if (options.scan) {
+    const coreRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+    const scanArgs = ['scan.mjs', '--json', ...(options.dryRun ? ['--dry-run'] : [])];
+    let stdout, stderr;
+    try { ({ stdout, stderr } = await promisify(execFile)(process.execPath, scanArgs, { cwd: coreRoot,
+      env: { ...process.env, CAREER_OPS_PORTALS: resolve(folder, 'portals-hh.yml'), CAREER_OPS_ROOT: dataRoot }, timeout: 120000, maxBuffer: 10000000 })); }
+    catch (error) { if (!error.stdout) throw diagnostic('scan-import', 'Core scan failed; inspect configuration and rerun cache import'); ({ stdout, stderr } = error); }
+    writeFileSync(resolve(folder, 'scan.log'), stdout + (stderr ?? ''));
+    try { result.scanReceipt = JSON.parse(stdout); }
+    catch { throw diagnostic('scan-import', 'Core did not return a JSON scan receipt; see scan.log'); }
+    atomicJson(resolve(folder, 'scan-receipt.json'), result.scanReceipt);
+  }
+  return result;
+}
+
+export function readCache(path) {
+  const data = JSON.parse(readFileSync(path, 'utf8'));
+  if (data.contractVersion !== CONTRACT_VERSION || !Array.isArray(data.jobs) || !Array.isArray(data.sourceStatuses)) throw diagnostic('invalid-config', 'Invalid HH cache contract');
+  const valid = data.jobs.every(j => j.source === 'hh' && typeof j.title === 'string' && /^https:\/\/hh\.ru\/vacancy\/[1-9]\d*$/.test(j.url));
+  if (!valid) throw diagnostic('invalid-config', 'Cache contains invalid HH job URLs or metadata');
+  return data;
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  const args = process.argv.slice(2), options = {};
   if (args.includes('--help')) {
-    console.log('Usage: node scan-hh.mjs --query "Senior Python" [--pages 2] [--area 1] [--title-only] [--channel chrome|chromium] [--headed] [--output path.json]');
-    return;
+    console.log('HH tool ' + TOOL_VERSION + ': --query TEXT | --config FILE [--entry NAME] | --import-cache FILE | --preflight; [--pages 1..20] [--area ID] [--title-only] [--channel chrome|chromium] [--artifact-dir DIR] [--resume] [--retries 0..2] [--output FILE] [--scan [--dry-run]]'); return;
   }
-  const options = {};
-  const values = { '--query': 'query', '--pages': 'pages', '--area': 'area', '--channel': 'channel', '--output': 'output' };
+  if (args.includes('--version')) { console.log(TOOL_VERSION); return; }
+  const flags = { '--query': 'query', '--config': 'config', '--entry': 'entry', '--pages': 'pages', '--area': 'area', '--channel': 'channel',
+    '--artifact-dir': 'artifactDir', '--output': 'output', '--import-cache': 'cache', '--retries': 'retries' };
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--headed') options.headed = true;
-    else if (arg === '--title-only') options.titleOnly = true;
-    else if (values[arg]) {
-      if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`${arg} requires a value`);
-      options[values[arg]] = args[++i];
-    } else throw new Error(`Unknown argument: ${arg}`);
+    const key = args[i];
+    if (['--title-only', '--headed', '--resume', '--preflight', '--scan', '--dry-run'].includes(key)) options[{ '--title-only': 'titleOnly', '--headed': 'headed', '--resume': 'resume', '--preflight': 'preflight', '--scan': 'scan', '--dry-run': 'dryRun' }[key]] = true;
+    else if (flags[key]) { if (!args[i + 1] || args[i + 1].startsWith('--')) throw diagnostic('invalid-config', key + ' requires a value'); options[flags[key]] = args[++i]; }
+    else throw diagnostic('invalid-config', 'Unknown option: ' + key);
   }
-  if (options.pages !== undefined) options.pages = Number(options.pages);
-  const result = await searchHh(options);
-  const json = JSON.stringify(result, null, 2) + '\n';
-  if (options.output) {
-    const output = resolve(options.output);
-    mkdirSync(dirname(output), { recursive: true });
-    writeFileSync(output, json);
-  }
-  process.stdout.write(json);
+  for (const key of ['pages', 'retries']) if (options[key] !== undefined) options[key] = Number(options[key]);
+  const controller = new AbortController(); process.once('SIGINT', () => controller.abort()); process.once('SIGTERM', () => controller.abort());
+  if (options.scan && !options.config) throw diagnostic('invalid-config', '--scan requires --config');
+  if ([options.query, options.config, options.cache, options.preflight].filter(Boolean).length > 1) throw diagnostic('invalid-config', 'Select one query/config/cache/preflight route');
+  let result;
+  if (options.cache) result = readCache(resolve(getCareerOpsRoot(), options.cache));
+  else if (options.preflight) { const browser = await preflight(options); await browser.close(); result = envelope([], [], { preflight: 'ok' }); }
+  else if (options.config) result = await collectBatch({ ...await loadBatchConfig(options.config, options.entry), ...options, signal: controller.signal });
+  else result = await searchHh({ ...options, signal: controller.signal });
+  if (options.output) atomicJson(resolve(getCareerOpsRoot(), options.output), result);
+  process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+  if (!options.cache && result.sourceStatuses.some(s => s.status !== 'ok')) process.exitCode = 1;
 }
-
 if (isMainModule(import.meta.url)) main().catch(error => {
-  console.error(error.message);
+  process.stdout.write(JSON.stringify(envelope([], [{ source: 'hh', transport: 'playwright', status: 'failed', completed_pages: 0, count: 0, ...classify(error) }])) + '\n');
   process.exitCode = 1;
 });
