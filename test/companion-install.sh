@@ -37,6 +37,6 @@ cmp scripts/ru-market/scan-hh.mjs "$HH_INSTALL_FIXTURE"
 sh update.sh
 printf '\n// user edit\n' >> scripts/ru-market/scan-hh.mjs
 if sh update.sh > refusal.log 2>&1; then echo 'update overwrote local changes' >&2; exit 1; fi
-rg -q 'Local or unmanaged changes' refusal.log
-rg -q 'user edit' scripts/ru-market/scan-hh.mjs
+grep -q 'Local or unmanaged changes' refusal.log
+grep -q 'user edit' scripts/ru-market/scan-hh.mjs
 echo 'companion install/update: pinned source, core Playwright, local edit protection OK'
