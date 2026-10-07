@@ -19,14 +19,17 @@ export default {
       const jobs = [];
       const sourceStatuses = [];
       let successes = 0;
+      const queryStatuses = [];
       results.forEach((result, index) => {
         const source = config.selected[index];
         if (result.status === 'fulfilled') {
           successes++;
           jobs.push(...result.value);
+          queryStatuses.push(...(result.value.queryStatuses ?? []));
           sourceStatuses.push({ source, ...result.value.sourceStatus, count: result.value.length });
         } else {
           const category = categoryOf(result.reason);
+          queryStatuses.push(...(result.reason?.queryStatuses ?? []));
           sourceStatuses.push({ source, status: 'failed', category, completed_pages: 0, count: 0,
             ...(result.reason?.sourceDiagnostic ?? {}) });
           ctx.log?.('ru-market', JSON.stringify({ source, category, status: 'failed' }));
@@ -36,10 +39,12 @@ export default {
         const error = results.length === 1 ? results[0].reason
           : new SourceError('sources-failed', `All sources failed: ${results.map((r, i) => `${config.selected[i]}=${categoryOf(r.reason)}`).join(', ')}`);
         error.sourceStatuses = sourceStatuses;
+        error.queryStatuses = queryStatuses;
         throw error;
       }
       const merged = deduplicate(jobs, config.order);
       Object.defineProperty(merged, 'sourceStatuses', { value: sourceStatuses });
+      Object.defineProperty(merged, 'queryStatuses', { value: queryStatuses });
       return merged;
     },
   },

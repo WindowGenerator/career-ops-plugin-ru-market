@@ -1,0 +1,9 @@
+# Standalone config; paths resolve against career-ops Data Root.
+hh_browser:
+  queries: [Senior Python, Python Backend]
+  pages: 2
+  titleOnly: true
+  channel: chrome
+  # area: '113'  # Explicit HH area ID; no eligibility inference.
+  artifactDir: data/scan-output/hh-browser
+# Put your existing scanner filters here if using --scan.

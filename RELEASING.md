@@ -39,4 +39,4 @@ Approval is granted by upstream maintainers after reviewing the pinned code.
 
 The release installers also fetch `companion/scan-hh.mjs.txt` from the same pinned commit and install it as a standalone career-ops script. Review this executable separately from the plugin audit. Test its browser lifecycle in career-ops with `node --test tests/providers/hh-browser.test.mjs`. The `.txt` source is not a plugin module.
 
-Release installers apply `companion/local-parser.patch` to career-ops after a clean `git apply --check`; already applied patches are detected. Incompatible local core edits stop installation. The patch is shipped as a release asset. Core system updates can replace this local extension; rerun the installer to restore it.
+Release installers apply `companion/core-contract.patch` to career-ops after a clean `git apply --check`; already applied patches are detected. Incompatible local core edits stop installation. The patch is shipped as a release asset; the previous local-parser patch is retained for upgrade compatibility. Core system updates can replace this local extension; rerun the installer to restore it.

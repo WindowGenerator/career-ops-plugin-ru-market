@@ -6,9 +6,10 @@ core_root="${CAREER_OPS_ROOT:-$plugin_root/../career-ops}"
 core_root="$(cd "$core_root" && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/ru-market-integration.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
-git -C "$core_root" archive HEAD | tar -x -C "$test_root"
+git -C "$core_root" archive 8c9aae34244ec2f79d1d21c05a34c5de608e7747 | tar -x -C "$test_root"
 ln -s "$core_root/node_modules" "$test_root/node_modules"
 cd "$test_root"
+git apply "$plugin_root/companion/core-contract.patch"
 export CAREER_OPS_ROOT="$test_root"
 node plugins.mjs new ru-market
 (cd "$plugin_root" && tar --exclude=.git --exclude=node_modules --exclude=health.json -cf - .) | tar -xf - -C plugins.local/ru-market
@@ -47,12 +48,14 @@ JS
 node --import ./preload.mjs scan.mjs --dry-run > dry-run.log
 cat dry-run.log
 test ! -f data/pipeline.md
-node --import ./preload.mjs scan.mjs > scan.log
+node --import ./preload.mjs scan.mjs --json > scan-receipt.json 2> scan.log
 node --input-type=module <<'JS'
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 const pipeline = readFileSync('data/pipeline.md', 'utf8');
 const history = readFileSync('data/scan-history.tsv', 'utf8');
+const receipt = JSON.parse(readFileSync('scan-receipt.json', 'utf8'));
+assert(receipt.source_statuses.some(s => s.source === 'hh' && typeof s.query === 'string' && s.queryId));
 assert.match(pipeline, /https:\/\/hh.ru\/vacancy\/101/);
 assert.match(pipeline, /cross-listed: Habr Career/);
 assert.match(pipeline, /https:\/\/career.habr.com\/vacancies\/201/);

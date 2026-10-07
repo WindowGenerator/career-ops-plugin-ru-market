@@ -1,3 +1,20 @@
+## 0.5.0 — Reproducible HH browser batches
+
+- Added config-driven HH batch collection, cache import, HH-only scan config,
+  query diagnostics/provenance, anonymous context reuse, checkpoint/resume,
+  browser preflight and version reporting. API/browser routes remain separate.
+- Fixed lower-bound salary parsing when tax prose contains “до”. Explicit
+  compensation preserves month/year/hour/shift units and gross/net/unknown;
+  the reviewed core patch adds filtering and formatting without annualization.
+- Install/update protect local tool edits, upgrade the previous parser patch
+  and restore it when core changes are incompatible. User config stays intact.
+- Added real DOM fixtures, isolated pipeline/repeat-import tests and CI Chromium
+  checks. Offline provider, integration, DOM and core regressions passed.
+- Live HH smoke on 2026-10-07: two pages, 40 unique vacancies, 11 compensation
+  fields; no access challenge, budget stopped at page-limit. No pipeline import.
+- Browser results remain listing metadata; geographic eligibility is unknown.
+  Optional detail enrichment remains deferred. getmatch remains opt-in.
+
 ## 0.4.1
 
 - Removed the ripgrep dependency from installer verification so integration

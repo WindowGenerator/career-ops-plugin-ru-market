@@ -1,0 +1,289 @@
+--- a/providers/local-parser.mjs
++++ b/providers/local-parser.mjs
+@@ -1,6 +1,7 @@
+ // @ts-check
+ /** @typedef {import('./_types.js').Provider} Provider */
+ 
++import { normalizeCompensation } from './_compensation.mjs';
+ import { execFile } from 'child_process';
+ import { realpathSync } from 'fs';
+ import { resolve, sep } from 'path';
+@@ -205,6 +206,28 @@
+   );
+   if (postedAt !== undefined) out.postedAt = postedAt;
+ 
++  for (const key of ['description', 'note']) {
++    if (typeof job[key] === 'string' && job[key].trim()) out[key] = job[key].trim();
++  }
++  if (job.compensation !== undefined) {
++    const compensation = normalizeCompensation(job.compensation);
++    if (compensation) out.compensation = compensation;
++  }
++  for (const key of ['source', 'transport', 'sourceId', 'locationText', 'workArrangement', 'dataLevel']) {
++    if (typeof job[key] === 'string') out[key] = job[key];
++  }
++  if (Array.isArray(job.locations) && job.locations.every(x => typeof x === 'string')) out.locations = job.locations;
++  if (Array.isArray(job.matchedQueries) && job.matchedQueries.every(x => x && typeof x.query === 'string' && typeof x.queryId === 'string')) out.matchedQueries = job.matchedQueries;
++  if (job.eligibility?.status === 'unknown') out.eligibility = { status: 'unknown' };
++  if (typeof job.hasDescription === 'boolean') out.hasDescription = job.hasDescription;
++  if (job.provenance && typeof job.provenance === 'object') out.provenance = job.provenance;
++  const salary = job.salary;
++  if (salary && typeof salary === 'object' && /^[A-Z]{3}$/.test(salary.currency ?? '')) {
++    const bounds = ['from', 'to'].filter(key => typeof salary[key] === 'number' && Number.isFinite(salary[key]) && salary[key] >= 0);
++    if (bounds.length && !(bounds.length === 2 && salary.from > salary.to)) {
++      out.salary = Object.fromEntries([['currency', salary.currency], ...bounds.map(key => [key, salary[key]])]);
++    }
++  }
+   return out;
+ }
+ 
+@@ -235,9 +258,16 @@
+     throw new Error('local parser JSON must be an array or contain jobs[]/results[]');
+   }
+ 
+-  return rawJobs
+-    .map(job => normalizeParserJob(job, entry))
+-    .filter(Boolean);
++  const jobs = rawJobs.map(job => normalizeParserJob(job, entry)).filter(Boolean);
++  if (!Array.isArray(payload) && payload.sourceStatuses !== undefined) {
++    if (!Array.isArray(payload.sourceStatuses) || payload.sourceStatuses.some(status =>
++      !status || typeof status.source !== 'string' || !['ok', 'partial', 'failed', 'skipped'].includes(status.status)
++      || !Number.isInteger(status.completed_pages) || status.completed_pages < 0)) {
++      throw new Error('local parser returned invalid sourceStatuses');
++    }
++    Object.defineProperty(jobs, 'sourceStatuses', { value: payload.sourceStatuses });
++  }
++  return jobs;
+ }
+ 
+ /** @type {Provider} */
+--- a/providers/_types.js
++++ b/providers/_types.js
+@@ -54,6 +54,21 @@
+  *                               salary_filter and rendered into pipeline.md's
+  *                               compensation column via formatCompensation(); an
+  *                               empty/absent value always passes the filter.
++ * @property {{min?: number, max?: number, currency?: string, period: 'month'|'year'|'hour'|'shift'|'unknown', taxBasis: 'gross'|'net'|'unknown', rawText: string}} [compensation]
++ *                               Explicit original units; never silently annualized,
++ *                               converted between currencies or between tax bases.
++ *                               Numeric filtering requires matching known period,
++ *                               currency and taxBasis; incompatible data passes.
++ * @property {string} [source]     Original source ID (e.g. hh).
++ * @property {string} [transport]  Original transport (api/html/playwright).
++ * @property {string} [sourceId]   Canonical posting ID within source.
++ * @property {string} [locationText] Original geographical listing label.
++ * @property {string[]} [locations] Observed location labels.
++ * @property {'remote'|'hybrid'|'onsite'|'unknown'} [workArrangement]
++ * @property {{status: 'unknown'}} [eligibility] Listing remote does not prove country eligibility.
++ * @property {'listing'|'detail'} [dataLevel]
++ * @property {boolean} [hasDescription]
++ * @property {{query: string, queryId: string}[]} [matchedQueries]
+  * @property {number} [trustScore] 0-100 trust score from _trust-validator.mjs.
+  * @property {string[]} [trustFlags] Flags raised by trust validation (e.g.
+  *                                   'invalid_url', 'suspicious_domain').
+--- a/scan.mjs
++++ b/scan.mjs
+@@ -58,6 +58,7 @@
+ import path from 'path';
+ import * as yaml from 'js-yaml';
+ 
++import { compensationMatchesFilter, formatExplicitCompensation } from './providers/_compensation.mjs';
+ import { makeHttpCtx } from './providers/_http.mjs';
+ import { buildTrustValidator } from './providers/_trust-validator.mjs';
+ import { loadProviders, resolveProvider } from './providers/_registry.mjs';
+@@ -966,7 +967,9 @@
+   // If both min and max are 0, no filtering applied
+   if (min === 0 && max === 0) return () => true;
+ 
+-  return (salary) => {
++  return (salary, compensation) => {
++    if (compensation !== undefined) return compensationMatchesFilter(compensation, { ...salaryFilter, min, max, currency: filterCurrency });
++    if (salaryFilter.period && salaryFilter.period !== 'year') return true;
+     // If no salary data exists, pass (conservative - many providers don't expose salary)
+     if (!salary) return true;
+ 
+@@ -2470,7 +2473,8 @@
+ // providers like Ashby attach as `offer.salary`) into a compact, sanitized cell
+ // such as `120000-160000 USD`. Returns '' when there is no usable salary data.
+ // Non-positive bounds are dropped (a 0 min/max is meaningless comp data, not "$0").
+-export function formatCompensation(salary) {
++export function formatCompensation(salary, compensation) {
++  if (compensation !== undefined) return sanitizeMarkdownField(formatExplicitCompensation(compensation));
+   if (!salary || typeof salary !== 'object') return '';
+   const num = (n) => (Number.isFinite(n) && n > 0 ? String(Math.round(n)) : null);
+   const lo = num(salary.min);
+@@ -2518,7 +2522,7 @@
+   // forces the (possibly empty) location cell to keep comp in column 5.
+   // loadSeenUrls dedups on the URL and ignores trailing columns (backward-compatible).
+   const location = typeof offer.location === 'string' ? sanitizeMarkdownField(offer.location) : '';
+-  const compensation = formatCompensation(offer.salary);
++  const compensation = formatCompensation(offer.salary, offer.compensation);
+   const base = `- [ ] ${url} | ${company} | ${title}`;
+   let line = base;
+   if (compensation) line = `${base} | ${location} | ${compensation}`;
+@@ -3484,6 +3488,7 @@
+   let totalDupes = 0;
+   const newOffers = [];
+   const errors = [...resolveErrors];
++  const sourceStatuses = [];
+   const emptyTargets = [];
+   const unverifiedZeroTargets = [];
+ 
+@@ -3562,6 +3567,15 @@
+       if (!Array.isArray(jobs)) {
+         throw new Error(`${provider.id}: fetch() did not return an array`);
+       }
++      if (Array.isArray(jobs.queryStatuses ?? jobs.sourceStatuses)) {
++        for (const sourceStatus of (jobs.queryStatuses ?? jobs.sourceStatuses)) {
++          sourceStatuses.push({ company: company.name, ...sourceStatus });
++          if (sourceStatus.status !== 'ok') errors.push({
++            company: company.name, source: sourceStatus.source,
++            error: `${sourceStatus.source}: ${sourceStatus.category || sourceStatus.status} (${sourceStatus.status})`,
++          });
++        }
++      }
+       totalFound += jobs.length;
+       if (!company._isBoard && jobs.length === 0) {
+         if (emptyTargetStatus(observation) === 'empty') emptyTargets.push(company.name);
+@@ -3617,7 +3631,7 @@
+           totalFilteredPostedDate++;
+           continue;
+         }
+-        if (!salaryFilter(job.salary)) {
++        if (!salaryFilter(job.salary, job.compensation)) {
+           totalFilteredSalary++;
+           continue;
+         }
+@@ -3658,7 +3672,7 @@
+         if (cooldownResult.skip) {
+           totalFilteredCooldown++;
+           cooldownOffers.push({
+-            job: { ...job, source: sourceName },
++            job: { ...job, sourceProvider: job.source, source: sourceName },
+             status: cooldownResult.reason,
+           });
+           continue;
+@@ -3679,12 +3693,18 @@
+         const careersUrlDomain = extractCareersUrlDomain(company.careers_url);
+         newOffers.push({
+           ...job,
++          sourceProvider: job.source,
+           source: sourceName,
+           tracked: Boolean(careersUrlDomain),
+           careersUrlDomain,
+         });
+       }
+     } catch (err) {
++      if (Array.isArray(err.queryStatuses ?? err.sourceStatuses)) {
++        for (const sourceStatus of (err.queryStatuses ?? err.sourceStatuses)) {
++          sourceStatuses.push({ company: company.name, ...sourceStatus });
++        }
++      }
+       errors.push({
+         company: company.name,
+         error: err.message,
+@@ -4028,6 +4048,9 @@
+     emitJsonReceipt({
+       version: 'careerops.scan.receipt@1',
+       date,
++      status: !errors.length ? 'ok'
++        : totalFound > 0 || sourceStatuses.some(s => s.status === 'ok' || s.status === 'partial') ? 'partial' : 'failed',
++      source_statuses: sourceStatuses,
+       scanned: targets.length,
+       skipped: skippedCount,
+       found: totalFound,
+@@ -4035,7 +4058,7 @@
+       duplicates: totalDupes,
+       added: verifiedOffers.length,
+       added_urls: verifiedOffers.map(offer => offer.url),
+-      errors: errors.map(({ company, error }) => ({ company, error })),
++      errors: errors.map(({ company, error, source }) => ({ company, error, ...(source ? { source } : {}) })),
+       unverified_zero: unverifiedZeroTargets,
+       dry_run: dryRun,
+     }, errors.length > 0 ? 2 : 0);
+--- /dev/null
++++ b/providers/_compensation.mjs
+@@ -0,0 +1,72 @@
++// Explicit source units. No currency, tax or annualization conversion.
++const tidy = value => typeof value === 'string' ? value.replace(/\s+/gu, ' ').trim() : '';
++export function normalizeCompensation(value) {
++  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
++  const out = {
++    period: ['month', 'year', 'hour', 'shift'].includes(value.period) ? value.period : 'unknown',
++    taxBasis: ['gross', 'net'].includes(value.taxBasis) ? value.taxBasis : 'unknown',
++    rawText: tidy(value.rawText),
++  };
++  if (typeof value.currency === 'string' && /^[A-Z]{3}$/.test(value.currency)) out.currency = value.currency === 'RUR' ? 'RUB' : value.currency;
++  const supplied = ['min', 'max'].filter(k => value[k] !== undefined);
++  const valid = supplied.length && supplied.every(k => typeof value[k] === 'number' && Number.isFinite(value[k]) && value[k] >= 0)
++    && !(value.min !== undefined && value.max !== undefined && value.min > value.max);
++  if (valid && out.currency) for (const key of supplied) out[key] = value[key];
++  else if (supplied.length) out.diagnostic = 'invalid-amount-or-currency';
++  if (typeof value.diagnostic === 'string') out.diagnostic = value.diagnostic;
++  return out;
++}
++export function parseCompensation(rawText, currencyHint) {
++  const raw = tidy(rawText);
++  if (!raw) return undefined;
++  const period = /(?:в|за) (?:месяц)|per month|\/month/i.test(raw) ? 'month'
++    : /(?:в|за) год|per year|annual|\/year/i.test(raw) ? 'year'
++    : /(?:в|за) час|per hour|\/hour/i.test(raw) ? 'hour'
++    : /(?:за|в) смену|per shift/i.test(raw) ? 'shift' : 'unknown';
++  const gross = /до вычета налогов|gross/i.test(raw), net = /на руки|net/i.test(raw);
++  const taxBasis = gross && !net ? 'gross' : net && !gross ? 'net' : 'unknown';
++  const detected = /₽|руб|\bRU[BR]\b/i.test(raw) ? 'RUB' : /\$|\bUSD\b/.test(raw) ? 'USD'
++    : /€|\bEUR\b/.test(raw) ? 'EUR' : /₸|\bKZT\b/.test(raw) ? 'KZT' : /\bBYN\b/.test(raw) ? 'BYN' : undefined;
++  const currency = currencyHint === 'RUR' ? 'RUB' : currencyHint || detected;
++  const result = { rawText: raw, period, taxBasis, ...(currency ? { currency } : {}) };
++  // Only the leading amount expression determines a bound; tax prose cannot.
++  const amount = '(\\d+(?: \\d{3})*(?:[.,]\\d+)?)(?:\\s*(тыс\\.?|[kк]))?';
++  const pattern = new RegExp(`^(?:(от|до|from|up to)\\s+)?${amount}(?:\\s*[–—-]\\s*${amount})?\\s*(₽|руб\\.?|RUB|RUR|USD|EUR|KZT|BYN|UZS|GEL|AMD|\\$|€|₸)(?=\\s|$|[,;])`, 'i');
++  const match = pattern.exec(raw);
++  if (!match || !currency || (detected && detected !== currency) || /не указ|договор|прогноз|похож|estimate|predicted/i.test(raw)) {
++    return normalizeCompensation({ ...result, diagnostic: 'ambiguous-amount-or-currency' });
++  }
++  if (period === 'unknown' && /недел|сутк|день|week|day/i.test(raw)) return normalizeCompensation({ ...result, diagnostic: 'unsupported-period' });
++  const number = (n, suffix) => Number(n.replace(/ /g, '').replace(',', '.')) * (suffix ? 1000 : 1);
++  const first = number(match[2], match[3]), second = match[4] ? number(match[4], match[5]) : undefined;
++  const bounds = second !== undefined ? { min: first, max: second }
++    : /^(до|up to)$/i.test(match[1] ?? '') ? { max: first }
++    : /^(от|from)$/i.test(match[1] ?? '') ? { min: first } : { min: first, max: first };
++  return normalizeCompensation({ ...result, ...bounds });
++}
++export function compensationFromSalary(salary, rawText = '', period = 'unknown', taxBasis = 'unknown') {
++  const text = parseCompensation(rawText);
++  return normalizeCompensation({ rawText, period: text?.period !== 'unknown' ? text?.period ?? period : period,
++    taxBasis: text?.taxBasis !== 'unknown' ? text?.taxBasis ?? taxBasis : taxBasis,
++    currency: salary?.currency, ...(salary?.from !== undefined ? { min: salary.from } : {}),
++    ...(salary?.to !== undefined ? { max: salary.to } : {}) });
++}
++
++export function compensationMatchesFilter(value, filter) {
++  const compensation = normalizeCompensation(value);
++  if (!compensation) return true;
++  const period = filter.period ?? 'year', taxBasis = filter.taxBasis ?? 'unknown';
++  // Units and tax basis must be explicitly comparable; unknown is not a guess.
++  if (compensation.period === 'unknown' || compensation.period !== period || taxBasis === 'unknown'
++    || compensation.taxBasis !== taxBasis || !filter.currency || compensation.currency !== filter.currency.toUpperCase()) return true;
++  const low = compensation.min ?? 0, high = compensation.max ?? Infinity;
++  return !(Number(filter.min ?? 0) > high || (Number(filter.max ?? 0) > 0 && Number(filter.max) < low));
++}
++export function formatExplicitCompensation(value) {
++  const c = normalizeCompensation(value);
++  if (!c) return '';
++  const range = c.min !== undefined && c.max !== undefined ? c.min === c.max ? `${c.min}` : `${c.min}-${c.max}`
++    : c.min !== undefined ? `from ${c.min}` : c.max !== undefined ? `up to ${c.max}` : '';
++  if (!range) return c.rawText;
++  return `${range} ${c.currency} / ${c.period} (${c.taxBasis})`;
++}
+--- a/tests/scan-json-receipt.test.mjs
++++ b/tests/scan-json-receipt.test.mjs
+@@ -112,6 +112,8 @@
+     assert.deepEqual(receipt, {
+       version: 'careerops.scan.receipt@1',
+       date: receipt.date,
++      status: 'ok',
++      source_statuses: [],
+       scanned: 0,
+       skipped: 0,
+       found: 0,
