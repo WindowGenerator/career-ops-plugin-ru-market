@@ -24,11 +24,10 @@ jobs:
       - name: Prepare install scripts
         run: |
           sha="$(git rev-parse HEAD)"
-          for script in install.sh update.sh; do
-            sed -i "s/__RELEASE_SHA__/$sha/g" "$script"
-            sh -n "$script"
-            grep -q "$sha" "$script"
-          done
+          sed -i "s/__RELEASE_SHA__/$sha/g" install.sh
+          sh -n install.sh
+          grep -q "$sha" install.sh
+          cp install.sh update.sh
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}

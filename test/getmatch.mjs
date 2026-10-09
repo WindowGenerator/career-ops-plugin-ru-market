@@ -67,7 +67,7 @@ test('getmatch: opt-in and backward-compatible source orders', () => {
   assert.throws(() => parseConfig({ ru_market: { source: 'getmatch' } }), /No enabled/);
   for (const order of [DEFAULT_SOURCES, SOURCES.slice(0, 5), [...SOURCES].reverse()]) {
     const parsed = parseConfig({ ru_market: { primary_source_order: order } });
-    assert.deepEqual(parsed.order.slice(0, order.length), order); assert.equal(parsed.order.length, 6);
+    assert.deepEqual(parsed.order.slice(0, order.length), order); assert.equal(parsed.order.length, SOURCES.length);
   }
   for (const options of [{ queries: ['Python'] }, { format: 'remote' }, { per_page: 0 }, { mode: 'html' }]) {
     assert.throws(() => parseConfig({ ru_market: { sources: { getmatch: options } } }));

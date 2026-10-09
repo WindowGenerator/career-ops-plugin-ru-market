@@ -1,3 +1,17 @@
+## 0.6.0 — optional HelloWorld.rs
+
+- Added opt-in `helloworld-rs` HTML keyword search with bounded pagination,
+  numeric-ID deduplication, query diagnostics and partial-results recovery.
+- Preserves explicit location/work arrangement, Serbian-format compensation,
+  multiple seniority labels and technology tags. Unknown values stay unknown;
+  listing expiry dates are not publication dates. Empty searches exclude the
+  site's unrelated newest-job recommendations.
+- New optional Job fields: `seniority: { levels, rawLabels }` and `skills`.
+  Core filtering and local-parser passthrough remain a separate roadmap task.
+- Health supports `--source helloworld-rs` with one Python listing request.
+  No browser fallback or detail requests. Source terms/access limitations are
+  documented in [docs/helloworld.md](docs/helloworld.md).
+
 ## 0.5.0 — Reproducible HH browser batches
 
 - Added config-driven HH batch collection, cache import, HH-only scan config,

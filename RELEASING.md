@@ -9,8 +9,9 @@
    `WindowGenerator/career-ops-plugin-ru-market`. The release workflow verifies the
    tag/version, runs offline tests and publishes a GitHub release with the exact
    release commit SHA in its notes, pinned registry entry, and `install.sh` /
-   `update.sh` assets. The SHA is injected during publishing because a tracked
-   file cannot contain its own commit SHA.
+   `update.sh` assets. CI injects the SHA into the maintained `install.sh`, then
+   copies it to `update.sh` for compatibility with existing release URLs. The SHA
+   is injected during publishing because a tracked file cannot contain its own commit SHA.
    Offline/integration CI and scheduled health are separate jobs.
 4. Run the published `install.sh` from the career-ops directory, or install the
    exact SHA manually:
@@ -30,8 +31,12 @@
    include `registrationIssue` pointing to the real issue. Use the upstream
    `plugin-registry.md` PR template. Do not invent an issue number or pin a tag
    name as a SHA. An initial PR description is in `examples/registry-pr.md`.
-7. For an update, run the new release's `update.sh` from the career-ops directory.
-   It removes the installed plugin and installs the new SHA with `--confirm`.
+7. For an update, rerun the new release's `install.sh` from the career-ops directory.
+   It detects the installed plugin and replaces it with the new SHA using `--confirm`.
+   The `update.sh` release asset is an identical copy and accepts fresh installs too.
+   Failed replacements restore the plugin directory, lock and plugin configuration;
+   applied core patches and companion updates remain. Do not run other plugin
+   management commands concurrently with the installer.
    Search parameters remain in `portals.yml`, outside this repository.
 
 The release workflow does not open upstream issues/PRs or send messages.

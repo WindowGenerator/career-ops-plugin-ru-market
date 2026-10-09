@@ -26,6 +26,9 @@ job_boards:
       sources:
         getmatch:
           enabled: true
+        helloworld_rs:
+          enabled: true
+          queries: [Data Engineer]
 YAML
 cat > preload.mjs <<'JS'
 import dns from 'node:dns/promises';
@@ -37,7 +40,7 @@ dns.lookup = async () => [{ address: '93.184.216.34', family: 4 }];
 syncBuiltinESMExports();
 globalThis.fetch = async value => {
   const url = new URL(value);
-  const source = { 'api.hh.ru': 'hh', 'career.habr.com': 'habr-career', 'geekjob.ru': 'geekjob', 'getmatch.ru': 'getmatch' }[url.hostname];
+  const source = { 'api.hh.ru': 'hh', 'career.habr.com': 'habr-career', 'geekjob.ru': 'geekjob', 'getmatch.ru': 'getmatch', 'www.helloworld.rs': 'helloworld-rs' }[url.hostname];
   if (!source) throw new Error(`Unexpected integration request: ${url.hostname}`);
   const ext = ['hh', 'getmatch'].includes(source) ? 'json' : 'html';
   return new Response(readFileSync(`plugins.local/ru-market/fixtures/${source}/normal.${ext}`, 'utf8'), {
@@ -64,6 +67,8 @@ assert.match(pipeline, /250000|250,000|250 000/);
 assert.match(history, /ru-market-api/);
 assert.match(pipeline, /https:\/\/getmatch.ru\/vacancies\/601-python-platform-engineer/);
 assert.match(history, /getmatch.ru/);
+assert.match(pipeline, /https:\/\/www.helloworld.rs\/posao\/Data-Engineer/);
+assert(receipt.source_statuses.some(s => s.source === 'helloworld-rs' && s.query === 'Data Engineer'));
 assert(!pipeline.includes('Synthetic description intentionally not copied'));
 console.log('integration: scaffold, audit, consent, scan preview, pipeline and history OK');
 JS

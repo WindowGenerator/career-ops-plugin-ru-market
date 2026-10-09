@@ -12,15 +12,15 @@
 curl -LsSf https://github.com/WindowGenerator/career-ops-plugin-ru-market/releases/latest/download/install.sh | sh
 ```
 
-Обновление из последнего релиза:
+Для обновления повторите ту же команду: `install.sh` сам определит, установлен ли плагин. Старый адрес обновления также работает:
 
 ```sh
 curl -LsSf https://github.com/WindowGenerator/career-ops-plugin-ru-market/releases/latest/download/update.sh | sh
 ```
 
-`update.sh` удаляет установленный плагин и ставит версию по SHA релизного коммита. Оба скрипта включают плагин после установки.
+CI подставляет SHA релизного коммита в `install.sh` и публикует его копию как `update.sh`. Оба адреса устанавливают или обновляют плагин и включают его после установки. При ошибке замены восстанавливаются прежний каталог плагина, `plugins.lock` и `config/plugins.yml`. Уже применённый патч ядра и обновлённый companion при этом остаются; локальные правки companion по-прежнему блокируют обновление. Не запускайте установку одновременно с другими командами, меняющими плагины.
 
-Добавьте запись из [примера](examples/portals.yml) в свой `portals.yml` и замените поисковые запросы. Источник выбирается через `ru_market.source`: `all`, `hh`, `habr-career`, `geekjob`, `superjob`, `trudvsem` или `getmatch`. Новые источники выключены по умолчанию; для `source: all` включите `sources.superjob.enabled` или `sources.trudvsem.enabled`. getmatch подключается отдельно через `sources.getmatch.enabled: true`; ограничения экспериментального адаптера описаны в [docs/getmatch.md](docs/getmatch.md). Для SuperJob задайте `SUPERJOB_API_KEY` в `.env` приложения career-ops. Настройка доступа к HH описана в [docs/hh.md](docs/hh.md).
+Добавьте запись из [примера](examples/portals.yml) в свой `portals.yml` и замените поисковые запросы. Источник выбирается через `ru_market.source`: `all`, `hh`, `habr-career`, `geekjob`, `superjob`, `trudvsem`, `getmatch` или `helloworld-rs`. Новые источники выключены по умолчанию; для `source: all` включите `sources.superjob.enabled` или `sources.trudvsem.enabled`. getmatch подключается отдельно через `sources.getmatch.enabled: true`; ограничения экспериментального адаптера описаны в [docs/getmatch.md](docs/getmatch.md). HelloWorld.rs подключается через `sources.helloworld_rs.enabled: true` и явный список `queries`; [настройка и ограничения](docs/helloworld.md). Для SuperJob задайте `SUPERJOB_API_KEY` в `.env` приложения career-ops. Настройка доступа к HH описана в [docs/hh.md](docs/hh.md).
 
 **SuperJob:** на 30 сентября 2026 года консоль разработчика некорректно проводит OAuth2-сценарий, из-за чего нам пока не удалось нормально зарегистрировать приложение и получить Secret key для живой проверки. Для публичного поиска вакансий плагину нужен именно Secret key приложения, а не пользовательский OAuth2-токен ([документация API](https://api.superjob.ru/)).
 
@@ -32,6 +32,9 @@ CAREER_OPS_ROOT=../career-ops npm run test:integration
 ```
 
 ## Роудмап
+
+- [ ] Добавить сербские площадки: Poslovi Infostud, HelloWorld.rs и Poslovi.rs — [план](docs/serbia-providers-plan.md).
+- [ ] Добавить общие фильтры уровня и технологий в career-ops отдельным этапом — [roadmap](docs/roadmap/core-job-filters.md).
 
 - [x] Добавить SuperJob и «Работу России» через публичные API.
 - [x] Проверить поиск вакансий «Работы России» на живом API.

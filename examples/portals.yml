@@ -39,3 +39,8 @@ job_boards:
           mode: api
           max_pages: 1
           per_page: 20
+        helloworld_rs:
+          enabled: false # opt-in Serbian HTML listings; see docs/helloworld.md
+          mode: html
+          max_pages: 2
+          queries: [Python, Data Engineer]

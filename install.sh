@@ -15,14 +15,34 @@ if [ ! -f plugins.mjs ]; then
 fi
 
 # Standalone companion: outside the plugin sandbox, uses career-ops Playwright.
-tool_tmp=$(mktemp "${TMPDIR:-/tmp}/ru-market-tool.XXXXXX")
-companion_tmp=$(mktemp "${TMPDIR:-/tmp}/ru-market-hh.XXXXXX")
-trap 'rm -f "$companion_tmp" "$tool_tmp"' EXIT HUP INT TERM
+work_tmp=$(mktemp -d "${TMPDIR:-/tmp}/ru-market-install.XXXXXX")
+tool_tmp="$work_tmp/scan-hh.mjs"
+companion_tmp="$work_tmp/core-contract.patch"
+restore_plugin=false
+cleanup() {
+  status=$?
+  trap - EXIT HUP INT TERM
+  if [ "$restore_plugin" = true ]; then
+    for path in plugins.local/ru-market plugins.lock config/plugins.yml; do
+      if ! rm -rf "$path" || { [ -e "$work_tmp/backup/$path" ] && ! cp -pR "$work_tmp/backup/$path" "$path"; }; then
+        echo "Recovery failed; backup retained at $work_tmp/backup." >&2
+        exit 1
+      fi
+    done
+    echo 'Plugin installation failed; previous plugin, lock and config restored.' >&2
+  fi
+  rm -rf "$work_tmp"
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 curl --fail --location --silent --show-error \
   "https://raw.githubusercontent.com/WindowGenerator/career-ops-plugin-ru-market/$release_sha/companion/scan-hh.mjs.txt" \
   --output "$tool_tmp"
 node --input-type=module - "$tool_tmp" "$release_sha" <<'JS'
-import { readFileSync, existsSync, mkdirSync, writeFileSync, renameSync, lstatSync } from 'node:fs';
+import { readFileSync, existsSync, lstatSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
@@ -35,7 +55,6 @@ for (const path of ['scripts', dir]) {
 const target = `${dir}/scan-hh.mjs`;
 const state = `${dir}/scan-hh.install.json`;
 const hash = data => createHash('sha256').update(data).digest('hex');
-const content = readFileSync(process.argv[2]);
 if (existsSync(target)) {
   if (lstatSync(target).isSymbolicLink() || !existsSync(state)
     || hash(readFileSync(target)) !== JSON.parse(readFileSync(state, 'utf8')).sha256) {
@@ -56,8 +75,7 @@ elif git apply --check "$companion_tmp" 2>/dev/null; then
   echo 'Applied core compensation contract.'
 else
   # Upgrade the previously shipped local-parser patch, restoring it on failure.
-  legacy_tmp=$(mktemp "${TMPDIR:-/tmp}/ru-market-legacy.XXXXXX")
-  trap 'rm -f "$companion_tmp" "$tool_tmp" "$legacy_tmp"' EXIT HUP INT TERM
+  legacy_tmp="$work_tmp/local-parser.patch"
   curl --fail --location --silent --show-error \
     "https://raw.githubusercontent.com/WindowGenerator/career-ops-plugin-ru-market/$release_sha/companion/local-parser.patch" \
     --output "$legacy_tmp"
@@ -90,4 +108,24 @@ writeFileSync(state, JSON.stringify({ release: process.argv[3], sha256: hash(con
 console.log(`Installed ${target}; configure provider: local-parser separately.`);
 JS
 
+# The core CLI requires removal before add. Save its state so a failed clone,
+# validation or enable step does not lose the existing installation.
+mkdir -p "$work_tmp/backup/plugins.local" "$work_tmp/backup/config"
+for path in plugins.local config plugins.local/ru-market plugins.lock config/plugins.yml; do
+  if [ -L "$path" ]; then
+    echo "Refusing symlink: $path" >&2
+    exit 1
+  fi
+done
+for path in plugins.local/ru-market plugins.lock config/plugins.yml; do
+  if [ -e "$path" ]; then cp -pR "$path" "$work_tmp/backup/$path"; fi
+done
+restore_plugin=true
+if [ -d plugins.local/ru-market ]; then
+  echo 'Updating ru-market.'
+  node plugins.mjs remove ru-market
+else
+  echo 'Installing ru-market.'
+fi
 node plugins.mjs add WindowGenerator/career-ops-plugin-ru-market --sha "$release_sha" --confirm
+restore_plugin=false
