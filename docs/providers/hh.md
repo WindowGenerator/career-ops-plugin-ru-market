@@ -1,6 +1,6 @@
 # HH: только браузерный companion
 
-С версии 0.7.0 плагин `ru-market` не обращается к API HH: адаптер `lib/hh.mjs`, переменная `HH_ACCESS_TOKEN` и хост `api.hh.ru` удалены. API отвечал `403` уже на первой странице выдачи. HH собирается браузерным companion через core `provider: local-parser`; установка, конфигурация (`hh_browser`), серверные параметры, тайм-ауты и диагностика описаны в [companion/README.md](../companion/README.md), готовая запись есть в [examples/hh-browser.yml](../examples/hh-browser.yml).
+С версии 0.7.0 плагин `ru-market` не обращается к API HH: адаптер `lib/hh.mjs`, переменная `HH_ACCESS_TOKEN` и хост `api.hh.ru` удалены. API отвечал `403` уже на первой странице выдачи. HH собирается браузерным companion через core `provider: local-parser`; установка, конфигурация (`hh_browser`), серверные параметры, тайм-ауты и диагностика описаны в [companion/README.md](../../companion/README.md), готовая запись есть в [examples/hh-browser.yml](../../examples/hh-browser.yml).
 
 ## Миграция с 0.6.x
 

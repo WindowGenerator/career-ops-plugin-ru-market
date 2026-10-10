@@ -8,7 +8,7 @@ Breaking change: the HH API adapter is removed.
   `primary_source_order` lengths are 2, 4, 5 or 6 (previously 3, 5, 6 or 7).
 - Migration: (1) remove `hh` from `primary_source_order` and `sources.hh` from `portals.yml`;
   (2) drop `HH_ACCESS_TOKEN` from `.env`; (3) add a separate `HH browser` entry with an
-  `hh_browser` block and a `local-parser` parser (see `examples/hh-browser.yml`, `docs/hh.md`);
+  `hh_browser` block and a `local-parser` parser (see `examples/hh-browser.yml`, `docs/providers/hh.md`);
   (4) rerun `install.sh`: it installs the companion, the shared module
   `scripts/ru-market/lib/untrusted.mjs` (refused if locally modified) and upgrades the core patch.
   Core updates may require reinstalling the patch.
@@ -41,7 +41,7 @@ Breaking change: the HH API adapter is removed.
   Core filtering and local-parser passthrough remain a separate roadmap task.
 - Health supports `--source helloworld-rs` with one Python listing request.
   No browser fallback or detail requests. Source terms/access limitations are
-  documented in [docs/helloworld.md](docs/helloworld.md).
+  documented in [docs/providers/helloworld-rs.md](docs/providers/helloworld-rs.md).
 
 ## 0.5.0 — Reproducible HH browser batches
 

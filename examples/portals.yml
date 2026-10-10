@@ -30,13 +30,13 @@ job_boards:
           mode: api
           max_pages: 1
           per_page: 20
-          # Experimental server-side filters, UNVERIFIED against the live API and off by default (docs/getmatch.md):
+          # Experimental server-side filters, UNVERIFIED against the live API and off by default (docs/providers/getmatch.md):
           # sa: 300000
           # pa: 7
           # se: [senior]
           # l: [Москва]
         helloworld_rs:
-          enabled: false # opt-in Serbian HTML listings; see docs/helloworld.md
+          enabled: false # opt-in Serbian HTML listings; see docs/providers/helloworld-rs.md
           mode: html
           max_pages: 2
           queries: [Python, Data Engineer]

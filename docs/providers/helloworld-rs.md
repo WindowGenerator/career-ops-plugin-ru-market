@@ -52,7 +52,7 @@ show unrelated newest advertisements; these are explicitly excluded.
 The direct plugin-provider preserves the new optional fields. Existing core
 filters/display and the companion local-parser do **not** yet consume/pass
 through seniority and skills. That work is tracked separately in
-[core-job-filters](roadmap/core-job-filters.md) and does not block this adapter.
+[core-job-filters](../roadmap/core-job-filters.md) and does not block this adapter.
 
 Health (no writes, one page of one explicit query, no retries):
 
@@ -66,5 +66,5 @@ fallback or CAPTCHA bypass is implemented. Public HTML access does not establish
 permission to download/reuse content: the observed footer prohibits downloading
 without permission, older indexed terms restrict automation, and the complete
 current terms could not be verified. See the
-[research and source links](helloworld-provider-research.md). This source remains
+[research and source links](../research/helloworld.md). This source remains
 opt-in and subject to its published access/content limitations.

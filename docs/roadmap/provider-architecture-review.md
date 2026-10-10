@@ -34,14 +34,14 @@
 
 ## Кандидаты: технический вердикт
 
-Вопрос один: отображается ли ответ источника на единую схему Job. Правовая сторона в вердикт не входит. Справка: условия Яндекса ограничивают использование контента функциями самого сайта (`docs/yandex-jobs-research.md:37`, п. 2.3 соглашения).
+Вопрос один: отображается ли ответ источника на единую схему Job. Правовая сторона в вердикт не входит. Справка: условия Яндекса ограничивают использование контента функциями самого сайта (`docs/research/yandex-jobs.md:37`, п. 2.3 соглашения).
 
 | Кандидат | Что подтверждено материалами репозитория | Вердикт |
 | --- | --- | --- |
-| Greenhouse, Lever, Workable (Армения) | Уже есть провайдеры core: `providers/greenhouse.mjs`, `lever.mjs`, `workable.mjs` (`docs/armenia-ats-research.md:5`). Они возвращают Job по штатной схеме | Отображаются; адаптер в плагине не нужен, нужны только проверенные доски |
-| workx.am | Публичный MCP с `search-jobs` и `get-job-details` (`armenia-ats-research.md:11`); схема ответа в репозитории не зафиксирована, пример ответа не сохранён (`armenia-ats-research.md:30` требует её проверить) | Не определён. Дополнительно транспорт не покрыт: `request()` плагина делает только GET (`http.mjs:24-40`), для MCP нужен POST (`FetchOptions` допускает `method` и `body`, `_types.js`, но плагин их не передаёт) |
-| staff.am, job.am | Публичные HTML и sitemap; поля карточек и стабильность URL не проверены (`armenia-ats-research.md:13-14,31-32`) | Не определён. По аналогии с HTML-адаптерами `title`, `url`, `company`, `location` вероятно извлекаемы, но без образцов разметки это предположение |
-| Яндекс Jobs | API не найден; DOM и XHR не исследованы, браузера не было (`yandex-jobs-research.md:15,31`). Наблюдались названия, команды, краткие описания, города, форматы работы, навыки (`:25`) | Частично. Возможное соответствие: `title`, `url`, `location`, `workArrangement`, `skills`, уровень через `pro_levels` (`:26`, значения не проверены). Компания всегда одна (`:9`). Зарплата и дата публикации не подтверждены (`:29`), пагинация «Показать ещё» не установлена (`:28`). Полный контракт ответа не определён |
+| Greenhouse, Lever, Workable (Армения) | Уже есть провайдеры core: `providers/greenhouse.mjs`, `lever.mjs`, `workable.mjs` (`docs/research/armenia-ats.md:5`). Они возвращают Job по штатной схеме | Отображаются; адаптер в плагине не нужен, нужны только проверенные доски |
+| workx.am | Публичный MCP с `search-jobs` и `get-job-details` (`docs/research/armenia-ats.md:11`); схема ответа в репозитории не зафиксирована, пример ответа не сохранён (`docs/research/armenia-ats.md:30` требует её проверить) | Не определён. Дополнительно транспорт не покрыт: `request()` плагина делает только GET (`http.mjs:24-40`), для MCP нужен POST (`FetchOptions` допускает `method` и `body`, `_types.js`, но плагин их не передаёт) |
+| staff.am, job.am | Публичные HTML и sitemap; поля карточек и стабильность URL не проверены (`docs/research/armenia-ats.md:13-14,31-32`) | Не определён. По аналогии с HTML-адаптерами `title`, `url`, `company`, `location` вероятно извлекаемы, но без образцов разметки это предположение |
+| Яндекс Jobs | API не найден; DOM и XHR не исследованы, браузера не было (`docs/research/yandex-jobs.md:15,31`). Наблюдались названия, команды, краткие описания, города, форматы работы, навыки (`:25`) | Частично. Возможное соответствие: `title`, `url`, `location`, `workArrangement`, `skills`, уровень через `pro_levels` (`:26`, значения не проверены). Компания всегда одна (`:9`). Зарплата и дата публикации не подтверждены (`:29`), пагинация «Показать ещё» не установлена (`:28`). Полный контракт ответа не определён |
 
 ## Матрица фильтров
 
@@ -55,7 +55,7 @@
 | geekjob | не проверялось | страница | то же |
 | superjob | не проверялось | `keyword` | то же |
 | trudvsem | не проверялось | `text` | то же |
-| getmatch | параметры `sa`, `pa`, `se`, `l`, `s`, `from_date`, `to_date`, `sp`, `pl`, `c`, `exclude_applied` выведены из клиентского кода (`docs/getmatch-research.md:27,31`). НЕПРОВЕРЕНЫ: значения и поведение не наблюдались (`getmatch-research.md:33`) | ничего (`docs/getmatch.md:22-24`) | то же, только на загруженных страницах |
+| getmatch | параметры `sa`, `pa`, `se`, `l`, `s`, `from_date`, `to_date`, `sp`, `pl`, `c`, `exclude_applied` выведены из клиентского кода (`docs/research/getmatch.md:27,31`). НЕПРОВЕРЕНЫ: значения и поведение не наблюдались (`docs/research/getmatch.md:33`) | ничего (`docs/providers/getmatch.md:22-24`) | то же, только на загруженных страницах |
 | helloworld-rs | не проверялось | `q` | то же; `seniority` и `skills` отдаются, но не фильтруются (`docs/roadmap/core-job-filters.md`) |
 
 ## Находки
@@ -85,18 +85,18 @@
 
 **a) HH: только браузерный транспорт.**
 
-- Удалить API-адаптер `lib/hh.mjs`, его fixtures (`fixtures/hh/`), необязательную переменную `HH_ACCESS_TOKEN` (`manifest.json:9`, `http.mjs:25-31`), API-части `docs/hh.md`, регистрацию в `index.mjs:2,12`, очередь и разрешённый хост `api.hh.ru`.
+- Удалить API-адаптер `lib/hh.mjs`, его fixtures (`fixtures/hh/`), необязательную переменную `HH_ACCESS_TOKEN` (`manifest.json:9`, `http.mjs:25-31`), API-части `docs/providers/hh.md`, регистрацию в `index.mjs:2,12`, очередь и разрешённый хост `api.hh.ru`.
 - Единственный транспорт HH — Playwright companion через core local-parser. Плагин запускать Playwright не может.
 - `hh` в `primary_source_order` отклоняется ошибкой `config` с подсказкой про `local-parser`. Допустимые длины выведены и проверены по `lib/config.mjs`: сейчас 3/5/6/7 (`config.mjs:31`, где 5 и 6 заданы жёстко и сверяются со срезами `SOURCES.slice(0, n)` на `config.mjs:34-36`). После удаления `SOURCES` = habr-career, geekjob, superjob, trudvsem, getmatch, helloworld-rs, обязательное ядро (`DEFAULT_SOURCES`) — habr-career и geekjob, допустимы длины 2/4/5/6 (ядро; +superjob, trudvsem; +getmatch; все шесть). Жёсткие 5 и 6 в `config.mjs:31,34-36` заменяются на 4 и 5. Миграционный тест (старые длины 3 и 7 отклоняются, 2/4/5/6 принимаются, `hh` даёт ошибку миграции) входит в объём. Тест `test/helloworld.mjs:67` жёстко задаёт `[3, 5, 6, 7]` и должен быть обновлён.
 - Ломающее изменение: версия 0.7.0, запись в `RELEASE_NOTES.md`.
 - Сбой companion (блокировка, тайм-аут) должен давать `sourceStatuses` со статусом `failed` и понятным текстом, сканирование не падает. Конкретный порядок — решение h.
-- Анонимный сбор HH остаётся зафиксированным правовым и техническим риском (одна строка): условия HH требуют работы через API (`docs/hh.md:48`), companion использует анонимный браузерный контекст (`companion/README.md:5`).
+- Анонимный сбор HH остаётся зафиксированным правовым и техническим риском (одна строка): условия HH требуют работы через API (`docs/providers/hh.md:48`), companion использует анонимный браузерный контекст (`companion/README.md:5`).
 
 **b) Фильтры: гибрид.** Серверные параметры для браузерного HH задаются через `parser.args`: `search_field`, `excluded_text`, `professional_role`, `only_with_salary`. `experience`, `employment`, `salary` передаются полями Job, фильтрует core (см. [core-job-filters.md](core-job-filters.md)). Образец — convention core: серверных фильтров в core-провайдерах нет. Уточнения: из этих параметров companion сейчас знает только `area` и `search_field=name` (через `--title-only`, `scan-hh.mjs.txt:122,270`); остальные флаги нужно добавить. Извлечение `experience` и `employment` из карточки выдачи не реализовано (`scan-hh.mjs.txt:21-39` читает только заголовок, компанию, место, зарплату, удалёнку) и не проверено на разметке; без этого поля останутся неизвестными. Режим `--query` через local-parser ограничен 20 с по умолчанию (`local-parser.mjs:13`), для нескольких страниц нужен `timeout_ms`.
 
 **c) Новые поля Job `employment` и `professional_role`** добавляются в плагине сразу как дополнительные поля (как `dataLevel`, `eligibility`). Контракт и фильтры core описываются в [core-job-filters.md](core-job-filters.md). Для маршрута local-parser требуется расширить список полей патчем core (см. находки).
 
-**d) getmatch: экспериментальные фильтры `sa`, `pa`, `se`, `l`** реализуются без предварительной живой проверки, строго как явное opt-in. В документации помечаются «непроверены»; проверка идёт через health и новые релизы, исправления в следующих версиях. Это отступает от запрета «не выдумывать фильтры». Поправка к исходной формулировке: в `docs/getmatch.md:25` такого текста нет; там на строках 22-24 сказано, что серверных фильтров в этой версии нет, а запрет «Do not invent query, remote or specialization filters» находится в `skill.md:38-39`. Поэтому `docs/getmatch.md` (строки 22-27) и `skill.md` обновляются в том же пакете работ. Остальные параметры (`s`, `from_date`, `to_date`, `sp`, `pl`, `c`, `exclude_applied`) не реализуются.
+**d) getmatch: экспериментальные фильтры `sa`, `pa`, `se`, `l`** реализуются без предварительной живой проверки, строго как явное opt-in. В документации помечаются «непроверены»; проверка идёт через health и новые релизы, исправления в следующих версиях. Это отступает от запрета «не выдумывать фильтры». Поправка к исходной формулировке: в `docs/providers/getmatch.md:25` такого текста нет; там на строках 22-24 сказано, что серверных фильтров в этой версии нет, а запрет «Do not invent query, remote or specialization filters» находится в `skill.md:38-39`. Поэтому `docs/providers/getmatch.md` (строки 22-27) и `skill.md` обновляются в том же пакете работ. Остальные параметры (`s`, `from_date`, `to_date`, `sp`, `pl`, `c`, `exclude_applied`) не реализуются.
 
 **e) Защита от prompt injection.**
 
@@ -128,7 +128,7 @@ company_aliases:
 
 ## Объём работ
 
-- [x] Удалить `lib/hh.mjs`, `fixtures/hh/`, `HH_ACCESS_TOKEN` из `manifest.json` и `http.mjs`, `api.hh.ru` из `allowedHosts`, `assertRequestUrl` и очереди, регистрацию в `index.mjs`, API-разделы `docs/hh.md`, `skill.md`, `README.md`, `examples/portals.yml`.
+- [x] Удалить `lib/hh.mjs`, `fixtures/hh/`, `HH_ACCESS_TOKEN` из `manifest.json` и `http.mjs`, `api.hh.ru` из `allowedHosts`, `assertRequestUrl` и очереди, регистрацию в `index.mjs`, API-разделы `docs/providers/hh.md`, `skill.md`, `README.md`, `examples/portals.yml`.
 - [x] Перестроить `lib/config.mjs`: убрать `hh` из `SOURCES` и `DEFAULT_SOURCES`, отклонять `hh` в `primary_source_order` и `sources.hh` с подсказкой про `local-parser`, пересчитать допустимые длины.
 - [x] Конфигурация HH: отдельная запись `portals.yml` с `hh_browser`, `parser.args` на неё, companion не читает `ru_market.sources.hh`; обновить `examples/hh-browser.yml`, `companion/README.md`, `README.md`.
 - [x] Companion: флаги `search_field`, `excluded_text`, `professional_role`, `only_with_salary`; при сбое в режиме `--query` код выхода 0, частичные вакансии и `sourceStatuses` (причина, завершённые страницы).
@@ -136,7 +136,7 @@ company_aliases:
 - [x] Исправить `salary` в плагине: `{min,max,currency}`, без `{from,to}`; `compensation` остаётся источником правды.
 - [x] `install.sh` и релиз: второй управляемый файл `scripts/ru-market/lib/untrusted.mjs` с тем же правилом отказа при локальных правках; общий каталог `scripts/ru-market/lib/` для будущих провайдеров.
 - [x] Дедупликация между записями: README описывает порядок запуска (HH отдельным сканированием раньше остальных) и `company_aliases` с примером; интеграционный тест подтверждает, что при раннем отдельном сканировании HH остаётся. Порядок записей в файле победителя не определяет.
-- [x] getmatch: опции `sa`, `pa`, `se`, `l` в `config.mjs` и `getmatch.mjs`, по умолчанию выключены, пометка «непроверены»; обновить `docs/getmatch.md` (строки 22-27), `skill.md` (строки 38-39), `examples/portals.yml`.
+- [x] getmatch: опции `sa`, `pa`, `se`, `l` в `config.mjs` и `getmatch.mjs`, по умолчанию выключены, пометка «непроверены»; обновить `docs/providers/getmatch.md` (строки 22-27), `skill.md` (строки 38-39), `examples/portals.yml`.
 - [x] Модуль `lib/untrusted.mjs`: нормализация и детекция, `injectionFlags`, счётчики в `sourceStatuses`; подключить к `makeJob` и companion через общий файл (решение f).
 - [x] Тесты: unit-тесты `untrusted.mjs` (русские и английские шаблоны, невидимый Unicode, bidi, управляющие символы, HTML-комментарии, лимиты, ложные срабатывания); тест миграции конфигурации (`hh` даёт ошибку миграции, старые длины 3 и 7 отклоняются, 2/4/5/6 принимаются; обновить `test/helloworld.mjs:67`, где задано `[3, 5, 6, 7]`); обновление fixtures и `test/run.mjs` (все ссылки на hh, строки 4, 20-23, 98-111, 146-161); тесты фильтров getmatch.
 - [x] Выровнять закрепление core в `.github/workflows/test.yml` и `health.yml` либо задокументировать различие. Различие задокументировано комментариями в `test.yml` и `health.yml`; существование коммитов офлайн не проверено.

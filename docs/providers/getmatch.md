@@ -31,7 +31,7 @@ are appended in stable order.
 ### Experimental filters `sa`, `pa`, `se`, `l` (UNVERIFIED)
 
 Opt-in, off by default. The parameter names were inferred from the public client
-code ([research](getmatch-research.md)); their values and behaviour were **never
+code ([research](../research/getmatch.md)); their values and behaviour were **never
 observed against the live API**, and this change made no live request. They may
 be wrong or unstable; verification happens through health checks and later
 releases. Without these options requests are identical to 0.6.0
@@ -72,7 +72,7 @@ Health excludes getmatch by default. Explicit diagnostic command:
 `node scripts/health.mjs --career-ops ../career-ops --source getmatch`.
 It makes one listing request and does not retry or request vacancy details.
 
-Read [the research](getmatch-research.md) and [implementation plan](getmatch-provider-plan.md)
+Read [the research](../research/getmatch.md) and [implementation plan](../roadmap/getmatch-provider.md)
 for the outstanding usage conditions. Implementation and verification use
 synthetic fixtures; no live collection, scheduled health or release was enabled.
 The code is experimental until permitted usage and live pagination are confirmed.
