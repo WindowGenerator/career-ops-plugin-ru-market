@@ -1,9 +1,37 @@
-# Standalone config; paths resolve against career-ops Data Root.
-hh_browser:
-  queries: [Senior Python, Python Backend]
-  pages: 2
-  titleOnly: true
-  channel: chrome
-  # area: '113'  # Explicit HH area ID; no eligibility inference.
-  artifactDir: data/scan-output/hh-browser
-# Put your existing scanner filters here if using --scan.
+# HH browser entry for portals.yml (companion installed by install.sh). Paths resolve against career-ops Data Root.
+# The hh_browser block is re-read on every run: edit it here, no reinstall needed.
+# core runs entries in parallel, so file order does not decide cross-entry duplicates; see README, "Дубликаты между записями".
+company_aliases:            # canonical name: [aliases]; lets company+role dedup match "Yandex" and "Яндекс"
+  Яндекс: [Yandex, ООО Яндекс]
+job_boards:
+  - name: HH browser
+    provider: local-parser
+    careers_url: https://hh.ru/search/vacancy
+    hh_browser:
+      queries: [Senior Python, Python Backend]
+      pages: 2
+      channel: chrome
+      # area: '113'               # explicit HH area ID; no eligibility inference
+      # Server-side HH search parameters (the companion sends them; core still filters afterwards):
+      search_field: [name]        # name | company_name | description (replaces the old titleOnly)
+      # excluded_text: junior
+      # professional_role: [96]   # numeric HH role IDs
+      # only_with_salary: true
+      # Companion deadline in ms, checked between pages. On expiry it exits 0 with the jobs collected so far
+      # and sourceStatuses status partial/failed, category timeout. Keep it below parser.timeout_ms.
+      timeout_ms: 100000
+    parser:
+      command: node
+      script: scripts/ru-market/scan-hh.mjs
+      args: [--config, portals.yml, --entry, HH browser, --no-artifacts]
+      # core kills the process at timeout_ms (default 20000); allow hh_browser.timeout_ms + about 60 s
+      # (one page navigation may take up to 45 s + 15 s wait). Rough budget: queries x pages x 15 s.
+      timeout_ms: 180000
+      max_buffer_bytes: 10000000
+  - name: Russian-language job boards
+    provider: ru-market
+    ru_market:
+      source: all
+      max_pages: 2
+# A top-level `hh_browser:` block in a standalone file is also accepted for batch runs:
+#   node scripts/ru-market/scan-hh.mjs --config hh-only.yml --artifact-dir data/scan-output/hh-run --scan --dry-run

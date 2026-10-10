@@ -1,13 +1,12 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import plugin, { adapters } from '../index.mjs';
-import { parseHh } from '../lib/hh.mjs';
 import { parseHabr } from '../lib/habr-career.mjs';
 import { parseGeekjob } from '../lib/geekjob.mjs';
 import { parseSuperjob } from '../lib/superjob.mjs';
 import { parseTrudvsem } from '../lib/trudvsem.mjs';
-import { parseConfig, DEFAULT_SOURCES } from '../lib/config.mjs';
-import { parseDate, parseSalary, jobUrl, normalizedCompany } from '../lib/normalize.mjs';
+import { parseConfig, DEFAULT_SOURCES, SOURCES } from '../lib/config.mjs';
+import { parseDate, parseSalary, jobUrl, normalizedCompany, structuredSalary } from '../lib/normalize.mjs';
 import { deduplicate } from '../lib/dedup.mjs';
 import { withRetry, retryAfterMs } from '../lib/retry.mjs';
 import { createQueue, enqueue } from '../lib/queue.mjs';
@@ -16,16 +15,13 @@ import { checkHealth } from '../scripts/health.mjs';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
-const fixture = (source, name = 'normal') => {
-  const value = readFileSync(new URL(`../fixtures/${source}/${name}.${source === 'hh' ? 'json' : 'html'}`, import.meta.url), 'utf8');
-  return source === 'hh' ? JSON.parse(value) : value;
-};
-const parsers = { hh: parseHh, 'habr-career': parseHabr, geekjob: parseGeekjob };
+const fixture = (source, name = 'normal') => readFileSync(new URL(`../fixtures/${source}/${name}.html`, import.meta.url), 'utf8');
+const parsers = { 'habr-career': parseHabr, geekjob: parseGeekjob };
 const parse = (source, name) => parsers[source](fixture(source, name));
 const config = (source, max_pages = 2) => parseConfig({ ru_market: { source, max_pages } }).sources[source];
 const ctxFor = run => ({ fetchText: run, fetchJson: run, log() {} });
 const httpError = status => Object.assign(new Error(`HTTP ${status}`), { status });
-const sourceFor = url => url.includes('api.hh.ru') ? 'hh' : url.includes('career.habr.com') ? 'habr-career' : 'geekjob';
+const sourceFor = url => url.includes('career.habr.com') ? 'habr-career' : 'geekjob';
 
 for (const source of DEFAULT_SOURCES) {
   test(`${source}: normal contract and salary`, () => {
@@ -33,7 +29,7 @@ for (const source of DEFAULT_SOURCES) {
     assert.strictEqual(jobs.length, 1);
     assert.strictEqual(hasNext, true);
     assert.strictEqual(jobs[0].postedAt, source === 'geekjob' ? Date.parse('2026-09-25T00:00:00+03:00') : Date.parse('2026-09-25T10:30:00+03:00'));
-    assert.deepStrictEqual(jobs[0].salary, { from: 250000, to: 350000, currency: 'RUB' });
+    assert.deepStrictEqual(jobs[0].salary, { min: 250000, max: 350000, currency: 'RUB' });
     assert.match(jobs[0].location, /только из РФ/);
     assert.match(jobs[0].note, /net|на руки/);
     assert(!jobs[0].url.includes('?'));
@@ -51,7 +47,6 @@ for (const source of DEFAULT_SOURCES) {
     assert.strictEqual(jobs.length, 2);
     assert.strictEqual(urls.length, 2);
     if (source === 'geekjob') assert.strictEqual(urls[1], 'https://geekjob.ru/vacancies/2');
-    if (source === 'hh') assert.strictEqual(new URL(urls[1]).searchParams.get('page'), '1');
   });
   test(`${source}: duplicate cards/pages`, async () => {
     const jobs = await adapters[source](config(source), ctxFor(async () => fixture(source)));
@@ -80,101 +75,74 @@ for (const source of DEFAULT_SOURCES) {
   });
   test(`${source}: missing optional fields`, () => {
     let value = fixture(source);
-    if (source === 'hh') value.items = [{ id: '103', name: 'Engineer' }];
-    else if (source === 'habr-career') value = '<div class="vacancy-card"><a class="vacancy-card__title-link" href="/vacancies/203">Engineer</a></div>';
+    if (source === 'habr-career') value = '<div class="vacancy-card"><a class="vacancy-card__title-link" href="/vacancies/203">Engineer</a></div>';
     else value = '<ul class="serp-list" id="serplist"><li class="collection-item avatar"><a class="title" href="/vacancy/000000000000000000000303">Engineer</a></li></ul>';
     const job = parsers[source](value).jobs[0];
     assert(job); assert.strictEqual(job.company, ''); assert(!('postedAt' in job)); assert(!('salary' in job));
   });
   test(`${source}: malformed URLs`, () => {
     let value = fixture(source);
-    if (source === 'hh') value.items[0].alternate_url = 'https://evil.example/vacancy/101';
-    else value = value.replace(/href="[^\"]*" class="vacancy-card__title-link"|class="title" href="[^\"]*"/g, source === 'habr-career'
+    value = value.replace(/href="[^\"]*" class="vacancy-card__title-link"|class="title" href="[^\"]*"/g, source === 'habr-career'
       ? 'href="javascript:alert(1)" class="vacancy-card__title-link"' : 'class="title" href="https://evil.example/vacancy/000000000000000000000301"');
     assert.throws(() => parsers[source](value), e => e.category === 'broken-markup');
   });
 }
 
-test('HH auto never falls back to HTML and stops after first 403', async () => {
-  const urls = [];
-  await assert.rejects(plugin.provider.fetch({ ru_market: { source: 'hh', sources: { hh: { mode: 'auto', queries: ['Python', 'Java'] } } } }, ctxFor(async url => { urls.push(url); throw httpError(403); })));
-  assert.strictEqual(urls.length, 1); assert(urls.every(u => new URL(u).hostname === 'api.hh.ru'));
-});
-test('HH application token is sent only to HH API', async () => {
-  const seen = [];
-  const ctx = { ...ctxFor(async (url, options) => {
-    seen.push({ url, headers: options.headers });
-    return fixture(sourceFor(url));
-  }), env: { HH_ACCESS_TOKEN: 'example-token' } };
-  await plugin.provider.fetch({ ru_market: { source: 'all', max_pages: 1 } }, ctx);
-  assert.strictEqual(seen.find(x => x.url.includes('api.hh.ru')).headers.Authorization, 'Bearer example-token');
-  assert(seen.filter(x => !x.url.includes('api.hh.ru')).every(x => !x.headers.Authorization));
-});
-test('high confidence merges all links, HH primary', () => {
+test('high confidence merges all links, Habr Career primary', () => {
   const jobs = DEFAULT_SOURCES.flatMap(s => parse(s).jobs);
   const merged = deduplicate(jobs);
-  assert.strictEqual(merged.length, 1); assert.match(merged[0].url, /hh.ru/);
+  assert.strictEqual(merged.length, 1); assert.match(merged[0].url, /habr/);
   for (const job of jobs.slice(1)) assert(merged[0].note.includes(job.url));
-  assert.match(merged[0].note, /Habr Career salary/);
+  assert.match(merged[0].note, /GeekJob salary/);
   assert.strictEqual(jobs[0].note.includes('cross-listed'), false);
 });
 test('primary source override', () => {
-  assert.match(deduplicate(DEFAULT_SOURCES.flatMap(s => parse(s).jobs), ['geekjob', 'hh', 'habr-career'])[0].url, /geekjob/);
+  assert.match(deduplicate(DEFAULT_SOURCES.flatMap(s => parse(s).jobs), ['geekjob', 'habr-career'])[0].url, /geekjob/);
 });
 test('medium confidence preserves reciprocal links', () => {
-  const jobs = ['hh', 'habr-career'].flatMap(s => parse(s).jobs).map(j => ({ ...j, description: '' }));
+  const jobs = DEFAULT_SOURCES.flatMap(s => parse(s).jobs).map(j => ({ ...j, description: '' }));
   const result = deduplicate(jobs);
   assert.strictEqual(result.length, 2);
-  assert(result[0].note.includes(`possible cross-listing: Habr Career ${result[1].url}`));
-  assert(result[1].note.includes(`possible cross-listing: HH ${result[0].url}`));
+  assert(result[0].note.includes(`possible cross-listing: GeekJob ${result[1].url}`));
+  assert(result[1].note.includes(`possible cross-listing: Habr Career ${result[0].url}`));
 });
 test('same title/company different locations, teams or salaries never merge', () => {
-  const [a, b] = ['hh', 'habr-career'].flatMap(s => parse(s).jobs);
-  for (const changes of [{ location: 'Казань / офис' }, { description: 'Анализ товарных остатков логистика поставки склад учёт бухгалтерские документы поддержка сотрудников магазинов обработка заявок клиентов' }, { salary: { from: 500000, currency: 'RUB' } }]) {
+  const [a, b] = DEFAULT_SOURCES.flatMap(s => parse(s).jobs);
+  for (const changes of [{ location: 'Казань / офис' }, { description: 'Анализ товарных остатков логистика поставки склад учёт бухгалтерские документы поддержка сотрудников магазинов обработка заявок клиентов' }, { salary: { min: 500000, currency: 'RUB' } }]) {
     const result = deduplicate([a, { ...b, ...changes }]);
     assert.strictEqual(result.length, 2); assert(!result[0].note.includes('cross-listing'));
   }
-  assert.strictEqual(deduplicate([a, { ...a, url: 'https://hh.ru/vacancy/999' }]).length, 2);
+  assert.strictEqual(deduplicate([a, { ...a, url: 'https://career.habr.com/vacancies/999' }]).length, 2);
 });
 test('complete-link grouping prevents merging distinct same-board vacancies', () => {
-  const [a, b] = ['hh', 'habr-career'].flatMap(s => parse(s).jobs);
-  const result = deduplicate([a, b, { ...b, url: 'https://career.habr.com/vacancies/999' }]);
+  const [a, b] = DEFAULT_SOURCES.flatMap(s => parse(s).jobs);
+  const result = deduplicate([a, b, { ...b, url: 'https://geekjob.ru/vacancy/000000000000000000000999' }]);
   assert.strictEqual(result.length, 2);
 });
 test('one failed source preserves other results', async () => {
   const jobs = await plugin.provider.fetch({ ru_market: { source: 'all' } }, ctxFor(async url => {
-    const source = sourceFor(url); if (source === 'hh') throw httpError(403); return fixture(source);
+    const source = sourceFor(url); if (source === 'habr-career') throw httpError(403); return fixture(source);
   }));
-  assert.strictEqual(jobs.length, 1); assert.match(jobs[0].url, /habr/); assert.match(jobs[0].note, /GeekJob/);
+  assert.strictEqual(jobs.length, 1); assert.match(jobs[0].url, /geekjob/);
   assert.deepStrictEqual(jobs.sourceStatuses.map(({ source, status, category }) => ({ source, status, category })), [
-    { source: 'hh', status: 'failed', category: 'access' },
-    { source: 'habr-career', status: 'ok', category: undefined },
+    { source: 'habr-career', status: 'failed', category: 'access' },
     { source: 'geekjob', status: 'ok', category: undefined },
   ]);
-});
-test('HH partial pages stop remaining queries and retain jobs', async () => {
-  const urls = [];
-  const jobs = await plugin.provider.fetch({ ru_market: { source: 'hh', sources: { hh: { queries: ['Python', 'Java'], max_pages: 2 } } } },
-    ctxFor(async url => { urls.push(url); if (urls.length === 2) throw httpError(403); return fixture('hh'); }));
-  assert.strictEqual(urls.length, 2);
-  assert.strictEqual(jobs.length, 1);
-  assert.deepStrictEqual(jobs.sourceStatuses, [{ source: 'hh', status: 'partial', completed_pages: 1, failed_page: 2, query_index: 1,
-    http_status: 403, category: 'access', count: 1 }]);
 });
 test('all failed sources is an error, not empty', async () => {
   await assert.rejects(plugin.provider.fetch({ ru_market: { source: 'all' } }, ctxFor(async () => { throw httpError(403); })), e => e.category === 'sources-failed');
 });
 test('disabled source makes no requests', async () => {
   const urls = [];
-  await plugin.provider.fetch({ ru_market: { source: 'all', sources: { hh: { enabled: false }, geekjob: { enabled: false } } } }, ctxFor(async url => { urls.push(url); return fixture('habr-career'); }));
-  assert.strictEqual(urls.length, 1); assert.match(urls[0], /career.habr.com/);
+  await plugin.provider.fetch({ ru_market: { source: 'all', sources: { habr_career: { enabled: false } } } }, ctxFor(async url => { urls.push(url); return fixture('geekjob'); }));
+  assert.strictEqual(urls.length, 1); assert.match(urls[0], /geekjob.ru/);
 });
 test('strict configuration and precedence', () => {
-  for (const raw of [{ source: 'bad' }, { max_pages: 0 }, { max_pages: 1.5 }, { max_pages: '3' }, { max_pages: 21 }, { sources: { nope: {} } }, { sources: { hh: { mode: 'html' } } }, { sources: { hh: { queries: 'Python' } } }, { sources: { hh: { queries: [3] } } }, { sources: { hh: { queries: [] } } }, { sources: { hh: { host: 'evil.example' } } }, { sources: { habr_career: { categories: ['../users'] } } }, { primary_source_order: ['hh'] }]) {
+  for (const raw of [{ source: 'bad' }, { max_pages: 0 }, { max_pages: 1.5 }, { max_pages: '3' }, { max_pages: 21 }, { sources: { nope: {} } }, { sources: { habr_career: { mode: 'api' } } }, { sources: { habr_career: { categories: [3] } } }, { sources: { habr_career: { categories: [] } } }, { sources: { habr_career: { categories: ['../users'] } } }, { primary_source_order: ['geekjob'] }]) {
     assert.throws(() => parseConfig({ ru_market: raw }), e => e.category === 'config');
   }
-  const cfg = parseConfig({ ru_market: { max_pages: 3, future_field: 'ignored', sources: { hh: { max_pages: 2 } } } });
-  assert.strictEqual(cfg.sources.hh.max_pages, 2); assert.strictEqual(cfg.sources.geekjob.max_pages, 3);
+  const cfg = parseConfig({ ru_market: { max_pages: 3, future_field: 'ignored', sources: { habr_career: { max_pages: 2 } } } });
+  assert.strictEqual(cfg.sources['habr-career'].max_pages, 2); assert.strictEqual(cfg.sources.geekjob.max_pages, 3);
 });
 test('localized date validation, timezone, year rollover; unknown dates omitted', () => {
   assert.strictEqual(parseDate('31 декабря', Date.parse('2026-01-02T00:00:00Z')), Date.parse('2025-12-31T00:00:00+03:00'));
@@ -186,9 +154,9 @@ test('localized date validation, timezone, year rollover; unknown dates omitted'
   assert(!('postedAt' in habr.jobs[0]));
 });
 test('salary variants and predicted salary', () => {
-  assert.deepStrictEqual(parseSalary('до 4 000 USD gross'), { to: 4000, currency: 'USD' });
-  assert.deepStrictEqual(parseSalary('от 250 тыс. руб. на руки'), { from: 250000, currency: 'RUB' });
-  assert.deepStrictEqual(parseSalary('3.5k — 4k € / месяц'), { from: 3500, to: 4000, currency: 'EUR' });
+  assert.deepStrictEqual(parseSalary('до 4 000 USD gross'), { max: 4000, currency: 'USD' });
+  assert.deepStrictEqual(parseSalary('от 250 тыс. руб. на руки'), { min: 250000, currency: 'RUB' });
+  assert.deepStrictEqual(parseSalary('3.5k — 4k € / месяц'), { min: 3500, max: 4000, currency: 'EUR' });
   assert.strictEqual(parseSalary('по договорённости'), undefined);
   const text = fixture('habr-career').replace('class="basic-salary"', 'class="predicted-salary"');
   const predicted = parseHabr(text).jobs[0];
@@ -208,11 +176,11 @@ test('Habr company rating and market salary do not enter job data', () => {
 test('company preserves original and does not transliterate', () => {
   assert.strictEqual(normalizedCompany('ООО «Тестовая компания»'), 'тестовая компания');
   assert.notStrictEqual(normalizedCompany('Яндекс'), normalizedCompany('Yandex'));
-  assert.strictEqual(parse('hh').jobs[0].company, 'ООО «Тестовая компания»');
+  assert.strictEqual(parse('geekjob').jobs[0].company, 'Тестовая компания');
 });
 test('egress guard rejects private/action/foreign URLs', () => {
-  for (const url of ['https://geekjob.ru/json/vacancies', 'https://geekjob.ru/rest/x', 'https://career.habr.com/users', 'https://employer.example/jobs', 'http://api.hh.ru/vacancies', 'https://api.hh.ru:444/vacancies']) assert.throws(() => assertRequestUrl(url));
-  for (const url of ['javascript:alert(1)', 'https://hh.ru.evil.example/vacancy/1', 'https://user@hh.ru/vacancy/1', '/vacancy/not-an-id']) assert.strictEqual(jobUrl(url, 'hh'), undefined);
+  for (const url of ['https://geekjob.ru/json/vacancies', 'https://geekjob.ru/rest/x', 'https://career.habr.com/users', 'https://employer.example/jobs', 'http://career.habr.com/vacancies', 'https://career.habr.com:444/vacancies', 'https://api.hh.ru/vacancies']) assert.throws(() => assertRequestUrl(url));
+  for (const url of ['javascript:alert(1)', 'https://career.habr.com.evil.example/vacancies/1', 'https://user@career.habr.com/vacancies/1', '/vacancies/not-an-id']) assert.strictEqual(jobUrl(url, 'habr-career'), undefined);
 });
 test('retry policy and bounded Retry-After', async () => {
   const delays = []; let calls = 0;
@@ -240,7 +208,7 @@ test('queue concurrency, pacing and recovery after failure', async () => {
   })));
   assert.strictEqual(peak, 1); assert.deepStrictEqual(starts, [0, 750, 1500]); assert.strictEqual(results[2].value, 2);
 });
-test('host queues are independent and HH concurrency is two', async () => {
+test('host queues are independent and removed hosts are unsupported', async () => {
   let release, started;
   const gate = new Promise(r => { release = r; });
   const ready = new Promise(r => { started = r; });
@@ -249,21 +217,17 @@ test('host queues are independent and HH concurrency is two', async () => {
   let otherRan = false;
   await enqueue('geekjob.ru', async () => { otherRan = true; });
   assert(otherRan); release(); await blocked;
-  let running = 0, peak = 0;
-  await Promise.all([1, 2, 3, 4].map(() => enqueue('api.hh.ru', async () => {
-    running++; peak = Math.max(peak, running); await new Promise(r => setTimeout(r, 10)); running--;
-  })));
-  assert.strictEqual(peak, 2);
+  assert.throws(() => enqueue('api.hh.ru', async () => {}), /Unsupported request host/);
 });
 test('health is one page/request per source, no vacancy payloads', async () => {
   const calls = [];
   const result = await checkHealth(ctxFor(async url => { calls.push(url); return fixture(sourceFor(url), 'empty'); }));
-  assert(result.ok); assert.strictEqual(calls.length, 3); assert(result.sources.every(s => s.status === 'empty'));
+  assert(result.ok); assert.strictEqual(calls.length, 2); assert(result.sources.every(s => s.status === 'empty'));
   assert(!JSON.stringify(result).includes('company'));
-  const errors = { hh: httpError(429), 'habr-career': httpError(403), geekjob: httpError(503) };
+  const errors = { 'habr-career': httpError(403), geekjob: httpError(503) };
   const failed = await checkHealth(ctxFor(async url => { throw errors[sourceFor(url)]; }));
   assert.strictEqual(failed.ok, false);
-  assert.deepStrictEqual(failed.sources.map(s => s.status), ['rate-limited', 'access', 'server']);
+  assert.deepStrictEqual(failed.sources.map(s => s.status), ['access', 'server']);
 });
 
 const superjobPage = (more = false) => ({ objects: [{ id: 25746005, profession: 'Python engineer',
@@ -287,10 +251,42 @@ test('new sources are opt-in and legacy precedence remains valid', () => {
   assert.throws(() => parseConfig({ ru_market: { source: 'trudvsem' } }), e => e.category === 'config');
   assert.throws(() => parseConfig({ ru_market: { sources: { superjob: { mode: 'html' } } } }), e => e.category === 'config');
 });
+test('salary has min/max/currency only and compensation carries the units', () => {
+  const [habr, geek] = DEFAULT_SOURCES.map(s => parse(s).jobs[0]);
+  for (const job of [habr, geek]) {
+    assert.deepStrictEqual(Object.keys(job.salary).sort(), ['currency', 'max', 'min']);
+    assert.deepStrictEqual({ min: job.compensation.min, max: job.compensation.max, currency: job.compensation.currency }, job.salary);
+  }
+  assert.strictEqual(habr.compensation.period, 'month'); assert.strictEqual(habr.compensation.taxBasis, 'net');
+  assert.deepStrictEqual(structuredSalary({ from: 1, to: 2, currency: 'RUR' }), { min: 1, max: 2, currency: 'RUB' });
+  assert.deepStrictEqual(structuredSalary({ min: 5, currency: 'USD' }), { min: 5, currency: 'USD' });
+  assert.strictEqual(structuredSalary({ min: 5, max: 1, currency: 'USD' }), undefined);
+});
+test('hh configuration is rejected with a migration hint and removed hosts are gone', () => {
+  for (const raw of [{ source: 'hh' }, { sources: { hh: { queries: ['Python'] } } }, { sources: { hh: {} } }, { primary_source_order: ['hh', 'habr-career', 'geekjob'] },
+    { primary_source_order: ['hh', ...SOURCES] }]) {
+    assert.throws(() => parseConfig({ ru_market: raw }), e => e.category === 'config' && /local-parser/.test(e.message) && /0\.7\.0/.test(e.message));
+  }
+  assert(!('hh' in adapters)); assert.strictEqual(jobUrl('https://hh.ru/vacancy/1', 'hh'), undefined);
+  assert.throws(() => assertRequestUrl('https://api.hh.ru/vacancies'));
+  const manifest = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+  assert(!manifest.allowedHosts.includes('api.hh.ru')); assert(!manifest.optionalEnv.includes('HH_ACCESS_TOKEN'));
+});
+test('primary_source_order accepts lengths 2/4/5/6 and rejects the previous 3 and 7', () => {
+  for (const n of [2, 4, 5, 6]) assert.deepStrictEqual(parseConfig({ ru_market: { primary_source_order: SOURCES.slice(0, n).reverse() } }).order, [...SOURCES.slice(0, n).reverse(), ...SOURCES.slice(n)]);
+  for (const order of [[...SOURCES.slice(0, 2), 'superjob'], ['hh', ...SOURCES.slice(0, 2)], [...SOURCES, 'hh'], SOURCES.slice(0, 1), [SOURCES[0], SOURCES[2], SOURCES[3], SOURCES[4]],
+    [...SOURCES.slice(0, 2), 'superjob', 'trudvsem', 'superjob']]) assert.throws(() => parseConfig({ ru_market: { primary_source_order: order } }), e => e.category === 'config');
+});
+test('all-source scan makes no HH requests and reports no hh status', async () => {
+  const urls = [];
+  const jobs = await plugin.provider.fetch({ ru_market: { source: 'all', max_pages: 1 } }, ctxFor(async url => { urls.push(url); return fixture(sourceFor(url)); }));
+  assert(urls.every(u => !/hh\.ru/.test(new URL(u).hostname)));
+  assert(jobs.sourceStatuses.every(s => s.source !== 'hh' && s.status === 'ok'));
+});
 test('SuperJob parses public listing and sends application key only to its API', async () => {
   const parsed = parseSuperjob(superjobPage());
   assert.strictEqual(parsed.jobs.length, 1);
-  assert.deepStrictEqual(parsed.jobs[0].salary, { from: 250000, to: 350000, currency: 'RUB' });
+  assert.deepStrictEqual(parsed.jobs[0].salary, { min: 250000, max: 350000, currency: 'RUB' });
   assert(!parsed.jobs[0].url.includes('?'));
   assert.strictEqual(parsed.jobs[0].postedAt, 1780000000000);
   const seen = [];
@@ -309,7 +305,7 @@ test('SuperJob parses public listing and sends application key only to its API',
 test('Работа России parses listing and advances offset', async () => {
   const parsed = parseTrudvsem(trudvsemPage());
   assert.strictEqual(parsed.jobs.length, 1);
-  assert.deepStrictEqual(parsed.jobs[0].salary, { from: 90000, to: 100000, currency: 'RUB' });
+  assert.deepStrictEqual(parsed.jobs[0].salary, { min: 90000, max: 100000, currency: 'RUB' });
   assert.strictEqual(parsed.jobs[0].location, 'Тольятти');
   assert(!parsed.jobs[0].url.includes('?'));
   const seen = [];
@@ -336,6 +332,19 @@ test('Работа России partial server error reports safe request coordi
   assert.strictEqual(logs[0].request, jobs.sourceStatuses[0].request);
   assert(!JSON.stringify(logs).includes('private search text'));
   assert(!JSON.stringify(jobs.sourceStatuses).includes('private search text'));
+});
+test('employment and professional_role are explicit source labels, unknown otherwise', () => {
+  const sj = superjobPage(); Object.assign(sj.objects[0], { type_of_work: { id: 6, title: 'Полная занятость' }, catalogues: [{ id: 33, title: 'Информационные технологии' }, { title: '' }] });
+  const [job] = parseSuperjob(sj).jobs;
+  assert.deepStrictEqual(job.employment, { values: ['full'], rawLabels: ['Полная занятость'] });
+  assert.deepStrictEqual(job.professional_role, { values: [], rawLabels: ['Информационные технологии'] });
+  const tv = trudvsemPage(); Object.assign(tv.results.vacancies[0].vacancy, { employment: 'Проектная работа', category: { specialisation: 'Образование' } });
+  const [work] = parseTrudvsem(tv).jobs;
+  assert.deepStrictEqual(work.employment, { values: ['project'], rawLabels: ['Проектная работа'] });
+  assert.deepStrictEqual(work.professional_role.rawLabels, ['Образование']);
+  for (const unknown of [parseSuperjob(superjobPage()).jobs[0], parseTrudvsem(trudvsemPage()).jobs[0], parse('habr-career').jobs[0], parse('geekjob').jobs[0]]) {
+    assert(!('employment' in unknown) && !('professional_role' in unknown));
+  }
 });
 test('new sources enforce listing and vacancy URL boundaries', () => {
   for (const url of ['https://api.superjob.ru/2.0/vacancies/', 'https://opendata.trudvsem.ru/api/v1/vacancies']) assertRequestUrl(url);

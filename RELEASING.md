@@ -10,7 +10,9 @@
    tag/version, runs offline tests and publishes a GitHub release with the exact
    release commit SHA in its notes, pinned registry entry, and `install.sh` /
    `update.sh` assets. CI injects the SHA into the maintained `install.sh`, then
-   copies it to `update.sh` for compatibility with existing release URLs. The SHA
+   copies it to `update.sh` for compatibility with existing release URLs. The release
+   also attaches `untrusted.mjs` (the companion's shared module, installed to
+   `scripts/ru-market/lib/`) next to `scan-hh.mjs`. The SHA
    is injected during publishing because a tracked file cannot contain its own commit SHA.
    Offline/integration CI and scheduled health are separate jobs.
 4. Run the published `install.sh` from the career-ops directory, or install the

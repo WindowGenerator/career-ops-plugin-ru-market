@@ -13,6 +13,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: plugin
+      # Intentionally not the integration pin of test.yml: health only needs plugins/_engine.mjs buildCtx
+      # (Node builtins) and is pinned to the upstream repository it was written against.
       - uses: actions/checkout@v4
         with:
           repository: santifer/career-ops

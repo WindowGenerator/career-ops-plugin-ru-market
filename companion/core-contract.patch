@@ -1,206 +1,6 @@
---- a/providers/local-parser.mjs
-+++ b/providers/local-parser.mjs
-@@ -1,6 +1,7 @@
- // @ts-check
- /** @typedef {import('./_types.js').Provider} Provider */
- 
-+import { normalizeCompensation } from './_compensation.mjs';
- import { execFile } from 'child_process';
- import { realpathSync } from 'fs';
- import { resolve, sep } from 'path';
-@@ -205,6 +206,28 @@
-   );
-   if (postedAt !== undefined) out.postedAt = postedAt;
- 
-+  for (const key of ['description', 'note']) {
-+    if (typeof job[key] === 'string' && job[key].trim()) out[key] = job[key].trim();
-+  }
-+  if (job.compensation !== undefined) {
-+    const compensation = normalizeCompensation(job.compensation);
-+    if (compensation) out.compensation = compensation;
-+  }
-+  for (const key of ['source', 'transport', 'sourceId', 'locationText', 'workArrangement', 'dataLevel']) {
-+    if (typeof job[key] === 'string') out[key] = job[key];
-+  }
-+  if (Array.isArray(job.locations) && job.locations.every(x => typeof x === 'string')) out.locations = job.locations;
-+  if (Array.isArray(job.matchedQueries) && job.matchedQueries.every(x => x && typeof x.query === 'string' && typeof x.queryId === 'string')) out.matchedQueries = job.matchedQueries;
-+  if (job.eligibility?.status === 'unknown') out.eligibility = { status: 'unknown' };
-+  if (typeof job.hasDescription === 'boolean') out.hasDescription = job.hasDescription;
-+  if (job.provenance && typeof job.provenance === 'object') out.provenance = job.provenance;
-+  const salary = job.salary;
-+  if (salary && typeof salary === 'object' && /^[A-Z]{3}$/.test(salary.currency ?? '')) {
-+    const bounds = ['from', 'to'].filter(key => typeof salary[key] === 'number' && Number.isFinite(salary[key]) && salary[key] >= 0);
-+    if (bounds.length && !(bounds.length === 2 && salary.from > salary.to)) {
-+      out.salary = Object.fromEntries([['currency', salary.currency], ...bounds.map(key => [key, salary[key]])]);
-+    }
-+  }
-   return out;
- }
- 
-@@ -235,9 +258,16 @@
-     throw new Error('local parser JSON must be an array or contain jobs[]/results[]');
-   }
- 
--  return rawJobs
--    .map(job => normalizeParserJob(job, entry))
--    .filter(Boolean);
-+  const jobs = rawJobs.map(job => normalizeParserJob(job, entry)).filter(Boolean);
-+  if (!Array.isArray(payload) && payload.sourceStatuses !== undefined) {
-+    if (!Array.isArray(payload.sourceStatuses) || payload.sourceStatuses.some(status =>
-+      !status || typeof status.source !== 'string' || !['ok', 'partial', 'failed', 'skipped'].includes(status.status)
-+      || !Number.isInteger(status.completed_pages) || status.completed_pages < 0)) {
-+      throw new Error('local parser returned invalid sourceStatuses');
-+    }
-+    Object.defineProperty(jobs, 'sourceStatuses', { value: payload.sourceStatuses });
-+  }
-+  return jobs;
- }
- 
- /** @type {Provider} */
---- a/providers/_types.js
-+++ b/providers/_types.js
-@@ -54,6 +54,21 @@
-  *                               salary_filter and rendered into pipeline.md's
-  *                               compensation column via formatCompensation(); an
-  *                               empty/absent value always passes the filter.
-+ * @property {{min?: number, max?: number, currency?: string, period: 'month'|'year'|'hour'|'shift'|'unknown', taxBasis: 'gross'|'net'|'unknown', rawText: string}} [compensation]
-+ *                               Explicit original units; never silently annualized,
-+ *                               converted between currencies or between tax bases.
-+ *                               Numeric filtering requires matching known period,
-+ *                               currency and taxBasis; incompatible data passes.
-+ * @property {string} [source]     Original source ID (e.g. hh).
-+ * @property {string} [transport]  Original transport (api/html/playwright).
-+ * @property {string} [sourceId]   Canonical posting ID within source.
-+ * @property {string} [locationText] Original geographical listing label.
-+ * @property {string[]} [locations] Observed location labels.
-+ * @property {'remote'|'hybrid'|'onsite'|'unknown'} [workArrangement]
-+ * @property {{status: 'unknown'}} [eligibility] Listing remote does not prove country eligibility.
-+ * @property {'listing'|'detail'} [dataLevel]
-+ * @property {boolean} [hasDescription]
-+ * @property {{query: string, queryId: string}[]} [matchedQueries]
-  * @property {number} [trustScore] 0-100 trust score from _trust-validator.mjs.
-  * @property {string[]} [trustFlags] Flags raised by trust validation (e.g.
-  *                                   'invalid_url', 'suspicious_domain').
---- a/scan.mjs
-+++ b/scan.mjs
-@@ -58,6 +58,7 @@
- import path from 'path';
- import * as yaml from 'js-yaml';
- 
-+import { compensationMatchesFilter, formatExplicitCompensation } from './providers/_compensation.mjs';
- import { makeHttpCtx } from './providers/_http.mjs';
- import { buildTrustValidator } from './providers/_trust-validator.mjs';
- import { loadProviders, resolveProvider } from './providers/_registry.mjs';
-@@ -966,7 +967,9 @@
-   // If both min and max are 0, no filtering applied
-   if (min === 0 && max === 0) return () => true;
- 
--  return (salary) => {
-+  return (salary, compensation) => {
-+    if (compensation !== undefined) return compensationMatchesFilter(compensation, { ...salaryFilter, min, max, currency: filterCurrency });
-+    if (salaryFilter.period && salaryFilter.period !== 'year') return true;
-     // If no salary data exists, pass (conservative - many providers don't expose salary)
-     if (!salary) return true;
- 
-@@ -2470,7 +2473,8 @@
- // providers like Ashby attach as `offer.salary`) into a compact, sanitized cell
- // such as `120000-160000 USD`. Returns '' when there is no usable salary data.
- // Non-positive bounds are dropped (a 0 min/max is meaningless comp data, not "$0").
--export function formatCompensation(salary) {
-+export function formatCompensation(salary, compensation) {
-+  if (compensation !== undefined) return sanitizeMarkdownField(formatExplicitCompensation(compensation));
-   if (!salary || typeof salary !== 'object') return '';
-   const num = (n) => (Number.isFinite(n) && n > 0 ? String(Math.round(n)) : null);
-   const lo = num(salary.min);
-@@ -2518,7 +2522,7 @@
-   // forces the (possibly empty) location cell to keep comp in column 5.
-   // loadSeenUrls dedups on the URL and ignores trailing columns (backward-compatible).
-   const location = typeof offer.location === 'string' ? sanitizeMarkdownField(offer.location) : '';
--  const compensation = formatCompensation(offer.salary);
-+  const compensation = formatCompensation(offer.salary, offer.compensation);
-   const base = `- [ ] ${url} | ${company} | ${title}`;
-   let line = base;
-   if (compensation) line = `${base} | ${location} | ${compensation}`;
-@@ -3484,6 +3488,7 @@
-   let totalDupes = 0;
-   const newOffers = [];
-   const errors = [...resolveErrors];
-+  const sourceStatuses = [];
-   const emptyTargets = [];
-   const unverifiedZeroTargets = [];
- 
-@@ -3562,6 +3567,15 @@
-       if (!Array.isArray(jobs)) {
-         throw new Error(`${provider.id}: fetch() did not return an array`);
-       }
-+      if (Array.isArray(jobs.queryStatuses ?? jobs.sourceStatuses)) {
-+        for (const sourceStatus of (jobs.queryStatuses ?? jobs.sourceStatuses)) {
-+          sourceStatuses.push({ company: company.name, ...sourceStatus });
-+          if (sourceStatus.status !== 'ok') errors.push({
-+            company: company.name, source: sourceStatus.source,
-+            error: `${sourceStatus.source}: ${sourceStatus.category || sourceStatus.status} (${sourceStatus.status})`,
-+          });
-+        }
-+      }
-       totalFound += jobs.length;
-       if (!company._isBoard && jobs.length === 0) {
-         if (emptyTargetStatus(observation) === 'empty') emptyTargets.push(company.name);
-@@ -3617,7 +3631,7 @@
-           totalFilteredPostedDate++;
-           continue;
-         }
--        if (!salaryFilter(job.salary)) {
-+        if (!salaryFilter(job.salary, job.compensation)) {
-           totalFilteredSalary++;
-           continue;
-         }
-@@ -3658,7 +3672,7 @@
-         if (cooldownResult.skip) {
-           totalFilteredCooldown++;
-           cooldownOffers.push({
--            job: { ...job, source: sourceName },
-+            job: { ...job, sourceProvider: job.source, source: sourceName },
-             status: cooldownResult.reason,
-           });
-           continue;
-@@ -3679,12 +3693,18 @@
-         const careersUrlDomain = extractCareersUrlDomain(company.careers_url);
-         newOffers.push({
-           ...job,
-+          sourceProvider: job.source,
-           source: sourceName,
-           tracked: Boolean(careersUrlDomain),
-           careersUrlDomain,
-         });
-       }
-     } catch (err) {
-+      if (Array.isArray(err.queryStatuses ?? err.sourceStatuses)) {
-+        for (const sourceStatus of (err.queryStatuses ?? err.sourceStatuses)) {
-+          sourceStatuses.push({ company: company.name, ...sourceStatus });
-+        }
-+      }
-       errors.push({
-         company: company.name,
-         error: err.message,
-@@ -4028,6 +4048,9 @@
-     emitJsonReceipt({
-       version: 'careerops.scan.receipt@1',
-       date,
-+      status: !errors.length ? 'ok'
-+        : totalFound > 0 || sourceStatuses.some(s => s.status === 'ok' || s.status === 'partial') ? 'partial' : 'failed',
-+      source_statuses: sourceStatuses,
-       scanned: targets.length,
-       skipped: skippedCount,
-       found: totalFound,
-@@ -4035,7 +4058,7 @@
-       duplicates: totalDupes,
-       added: verifiedOffers.length,
-       added_urls: verifiedOffers.map(offer => offer.url),
--      errors: errors.map(({ company, error }) => ({ company, error })),
-+      errors: errors.map(({ company, error, source }) => ({ company, error, ...(source ? { source } : {}) })),
-       unverified_zero: unverifiedZeroTargets,
-       dry_run: dryRun,
-     }, errors.length > 0 ? 2 : 0);
+diff --git a/providers/_compensation.mjs b/providers/_compensation.mjs
+new file mode 100644
+index 0000000..bc11c0c
 --- /dev/null
 +++ b/providers/_compensation.mjs
 @@ -0,0 +1,72 @@
@@ -276,9 +76,274 @@
 +  if (!range) return c.rawText;
 +  return `${range} ${c.currency} / ${c.period} (${c.taxBasis})`;
 +}
+diff --git a/providers/_trust-validator.mjs b/providers/_trust-validator.mjs
+index 632b804..4430248 100644
+--- a/providers/_trust-validator.mjs
++++ b/providers/_trust-validator.mjs
+@@ -55,6 +55,7 @@ const PENALTIES = {
+   missing_apply_url: 40,
+   suspicious_domain: 25,
+   company_domain_mismatch: 15,
++  prompt_injection_suspected: 30,
+ };
+ 
+ /**
+@@ -197,7 +198,7 @@ export function buildTrustValidator(config) {
+     .map(d => String(d).toLowerCase().trim())
+     .filter(Boolean);
+ 
+-  return (job) => {
++  const validate = (job) => {
+     /** @type {string[]} */
+     const flags = [];
+     let score = 100;
+@@ -251,4 +252,12 @@ export function buildTrustValidator(config) {
+     score = Math.max(0, Math.min(100, score));
+     return { score, flags, level: classifyTrustLevel(score) };
+   };
++
++  // Provider-reported injection patterns: one flag and one penalty per job.
++  return (job) => {
++    const result = validate(job);
++    if (!Array.isArray(job.injectionFlags) || !job.injectionFlags.some(flag => typeof flag === 'string' && flag)) return result;
++    const score = Math.max(0, result.score - PENALTIES.prompt_injection_suspected);
++    return { score, flags: [...result.flags, 'prompt-injection-suspected'], level: classifyTrustLevel(score) };
++  };
+ }
+diff --git a/providers/_types.js b/providers/_types.js
+index 9bc38b5..c77e3a1 100644
+--- a/providers/_types.js
++++ b/providers/_types.js
+@@ -54,6 +54,29 @@
+  *                               salary_filter and rendered into pipeline.md's
+  *                               compensation column via formatCompensation(); an
+  *                               empty/absent value always passes the filter.
++ * @property {{min?: number, max?: number, currency?: string, period: 'month'|'year'|'hour'|'shift'|'unknown', taxBasis: 'gross'|'net'|'unknown', rawText: string}} [compensation]
++ *                               Explicit original units; never silently annualized,
++ *                               converted between currencies or between tax bases.
++ *                               Numeric filtering requires matching known period,
++ *                               currency and taxBasis; incompatible data passes.
++ * @property {string} [source]     Original source ID (e.g. hh).
++ * @property {string} [transport]  Original transport (api/html/playwright).
++ * @property {string} [sourceId]   Canonical posting ID within source.
++ * @property {string} [locationText] Original geographical listing label.
++ * @property {string[]} [locations] Observed location labels.
++ * @property {'remote'|'hybrid'|'onsite'|'unknown'} [workArrangement]
++ * @property {{status: 'unknown'}} [eligibility] Listing remote does not prove country eligibility.
++ * @property {'listing'|'detail'} [dataLevel]
++ * @property {boolean} [hasDescription]
++ * @property {{query: string, queryId: string}[]} [matchedQueries]
++ * @property {{values: string[], rawLabels: string[]}} [employment]
++ *                               Explicit employment labels from the source; absent means unknown.
++ * @property {{values: string[], rawLabels: string[]}} [professional_role]
++ *                               Explicit professional-role labels from the source; absent means unknown.
++ * @property {string[]} [injectionFlags] IDs of instruction-like patterns a provider found in
++ *                               untrusted posting text. buildTrustValidator turns any non-empty
++ *                               list into one 'prompt-injection-suspected' trustFlags entry
++ *                               and lowers trustScore by 30 once. Postings are never dropped.
+  * @property {number} [trustScore] 0-100 trust score from _trust-validator.mjs.
+  * @property {string[]} [trustFlags] Flags raised by trust validation (e.g.
+  *                                   'invalid_url', 'suspicious_domain').
+diff --git a/providers/local-parser.mjs b/providers/local-parser.mjs
+index 26eaa94..c73d183 100644
+--- a/providers/local-parser.mjs
++++ b/providers/local-parser.mjs
+@@ -1,6 +1,7 @@
+ // @ts-check
+ /** @typedef {import('./_types.js').Provider} Provider */
+ 
++import { normalizeCompensation } from './_compensation.mjs';
+ import { execFile } from 'child_process';
+ import { realpathSync } from 'fs';
+ import { resolve, sep } from 'path';
+@@ -205,6 +206,40 @@ function normalizeParserJob(job, entry) {
+   );
+   if (postedAt !== undefined) out.postedAt = postedAt;
+ 
++  for (const key of ['description', 'note']) {
++    if (typeof job[key] === 'string' && job[key].trim()) out[key] = job[key].trim();
++  }
++  if (job.compensation !== undefined) {
++    const compensation = normalizeCompensation(job.compensation);
++    if (compensation) out.compensation = compensation;
++  }
++  for (const key of ['source', 'transport', 'sourceId', 'locationText', 'workArrangement', 'dataLevel']) {
++    if (typeof job[key] === 'string') out[key] = job[key];
++  }
++  if (Array.isArray(job.locations) && job.locations.every(x => typeof x === 'string')) out.locations = job.locations;
++  if (Array.isArray(job.matchedQueries) && job.matchedQueries.every(x => x && typeof x.query === 'string' && typeof x.queryId === 'string')) out.matchedQueries = job.matchedQueries;
++  if (job.eligibility?.status === 'unknown') out.eligibility = { status: 'unknown' };
++  if (typeof job.hasDescription === 'boolean') out.hasDescription = job.hasDescription;
++  if (job.provenance && typeof job.provenance === 'object') out.provenance = job.provenance;
++  for (const key of ['employment', 'professional_role']) {
++    const value = job[key];
++    if (value && Array.isArray(value.values) && Array.isArray(value.rawLabels) && [...value.values, ...value.rawLabels].every(x => typeof x === 'string')) {
++      out[key] = { values: value.values, rawLabels: value.rawLabels };
++    }
++  }
++  if (Array.isArray(job.injectionFlags)) {
++    const flags = job.injectionFlags.filter(flag => typeof flag === 'string' && /^[a-z][a-z0-9-]{0,39}$/.test(flag)).slice(0, 20);
++    if (flags.length) out.injectionFlags = flags;
++  }
++  // {min, max} is the documented shape; legacy {from, to} producers keep working.
++  const salary = job.salary;
++  if (salary && typeof salary === 'object' && /^[A-Z]{3}$/.test(salary.currency ?? '')) {
++    const bound = (...keys) => keys.map(key => salary[key]).find(value => typeof value === 'number' && Number.isFinite(value) && value >= 0);
++    const min = bound('min', 'from'), max = bound('max', 'to');
++    if ((min !== undefined || max !== undefined) && !(min !== undefined && max !== undefined && min > max)) {
++      out.salary = { currency: salary.currency, ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}) };
++    }
++  }
+   return out;
+ }
+ 
+@@ -235,9 +270,16 @@ async function runLocalParser(entry) {
+     throw new Error('local parser JSON must be an array or contain jobs[]/results[]');
+   }
+ 
+-  return rawJobs
+-    .map(job => normalizeParserJob(job, entry))
+-    .filter(Boolean);
++  const jobs = rawJobs.map(job => normalizeParserJob(job, entry)).filter(Boolean);
++  if (!Array.isArray(payload) && payload.sourceStatuses !== undefined) {
++    if (!Array.isArray(payload.sourceStatuses) || payload.sourceStatuses.some(status =>
++      !status || typeof status.source !== 'string' || !['ok', 'partial', 'failed', 'skipped'].includes(status.status)
++      || !Number.isInteger(status.completed_pages) || status.completed_pages < 0)) {
++      throw new Error('local parser returned invalid sourceStatuses');
++    }
++    Object.defineProperty(jobs, 'sourceStatuses', { value: payload.sourceStatuses });
++  }
++  return jobs;
+ }
+ 
+ /** @type {Provider} */
+diff --git a/scan.mjs b/scan.mjs
+index 7c8d516..2b06ed8 100644
+--- a/scan.mjs
++++ b/scan.mjs
+@@ -58,6 +58,7 @@ import { fileURLToPath } from 'url';
+ import path from 'path';
+ import * as yaml from 'js-yaml';
+ 
++import { compensationMatchesFilter, formatExplicitCompensation } from './providers/_compensation.mjs';
+ import { makeHttpCtx } from './providers/_http.mjs';
+ import { buildTrustValidator } from './providers/_trust-validator.mjs';
+ import { loadProviders, resolveProvider } from './providers/_registry.mjs';
+@@ -966,7 +967,9 @@ export function buildSalaryFilter(salaryFilter) {
+   // If both min and max are 0, no filtering applied
+   if (min === 0 && max === 0) return () => true;
+ 
+-  return (salary) => {
++  return (salary, compensation) => {
++    if (compensation !== undefined) return compensationMatchesFilter(compensation, { ...salaryFilter, min, max, currency: filterCurrency });
++    if (salaryFilter.period && salaryFilter.period !== 'year') return true;
+     // If no salary data exists, pass (conservative - many providers don't expose salary)
+     if (!salary) return true;
+ 
+@@ -2470,7 +2473,8 @@ export function sanitizeTsvField(value) {
+ // providers like Ashby attach as `offer.salary`) into a compact, sanitized cell
+ // such as `120000-160000 USD`. Returns '' when there is no usable salary data.
+ // Non-positive bounds are dropped (a 0 min/max is meaningless comp data, not "$0").
+-export function formatCompensation(salary) {
++export function formatCompensation(salary, compensation) {
++  if (compensation !== undefined) return sanitizeMarkdownField(formatExplicitCompensation(compensation));
+   if (!salary || typeof salary !== 'object') return '';
+   const num = (n) => (Number.isFinite(n) && n > 0 ? String(Math.round(n)) : null);
+   const lo = num(salary.min);
+@@ -2518,7 +2522,7 @@ export function formatPipelineOffer(offer) {
+   // forces the (possibly empty) location cell to keep comp in column 5.
+   // loadSeenUrls dedups on the URL and ignores trailing columns (backward-compatible).
+   const location = typeof offer.location === 'string' ? sanitizeMarkdownField(offer.location) : '';
+-  const compensation = formatCompensation(offer.salary);
++  const compensation = formatCompensation(offer.salary, offer.compensation);
+   const base = `- [ ] ${url} | ${company} | ${title}`;
+   let line = base;
+   if (compensation) line = `${base} | ${location} | ${compensation}`;
+@@ -3484,6 +3488,7 @@ async function main() {
+   let totalDupes = 0;
+   const newOffers = [];
+   const errors = [...resolveErrors];
++  const sourceStatuses = [];
+   const emptyTargets = [];
+   const unverifiedZeroTargets = [];
+ 
+@@ -3562,6 +3567,15 @@ async function main() {
+       if (!Array.isArray(jobs)) {
+         throw new Error(`${provider.id}: fetch() did not return an array`);
+       }
++      if (Array.isArray(jobs.queryStatuses ?? jobs.sourceStatuses)) {
++        for (const sourceStatus of (jobs.queryStatuses ?? jobs.sourceStatuses)) {
++          sourceStatuses.push({ company: company.name, ...sourceStatus });
++          if (sourceStatus.status !== 'ok') errors.push({
++            company: company.name, source: sourceStatus.source,
++            error: `${sourceStatus.source}: ${sourceStatus.category || sourceStatus.status} (${sourceStatus.status})`,
++          });
++        }
++      }
+       totalFound += jobs.length;
+       if (!company._isBoard && jobs.length === 0) {
+         if (emptyTargetStatus(observation) === 'empty') emptyTargets.push(company.name);
+@@ -3617,7 +3631,7 @@ async function main() {
+           totalFilteredPostedDate++;
+           continue;
+         }
+-        if (!salaryFilter(job.salary)) {
++        if (!salaryFilter(job.salary, job.compensation)) {
+           totalFilteredSalary++;
+           continue;
+         }
+@@ -3658,7 +3672,7 @@ async function main() {
+         if (cooldownResult.skip) {
+           totalFilteredCooldown++;
+           cooldownOffers.push({
+-            job: { ...job, source: sourceName },
++            job: { ...job, sourceProvider: job.source, source: sourceName },
+             status: cooldownResult.reason,
+           });
+           continue;
+@@ -3679,12 +3693,18 @@ async function main() {
+         const careersUrlDomain = extractCareersUrlDomain(company.careers_url);
+         newOffers.push({
+           ...job,
++          sourceProvider: job.source,
+           source: sourceName,
+           tracked: Boolean(careersUrlDomain),
+           careersUrlDomain,
+         });
+       }
+     } catch (err) {
++      if (Array.isArray(err.queryStatuses ?? err.sourceStatuses)) {
++        for (const sourceStatus of (err.queryStatuses ?? err.sourceStatuses)) {
++          sourceStatuses.push({ company: company.name, ...sourceStatus });
++        }
++      }
+       errors.push({
+         company: company.name,
+         error: err.message,
+@@ -4028,6 +4048,9 @@ async function main() {
+     emitJsonReceipt({
+       version: 'careerops.scan.receipt@1',
+       date,
++      status: !errors.length ? 'ok'
++        : totalFound > 0 || sourceStatuses.some(s => s.status === 'ok' || s.status === 'partial') ? 'partial' : 'failed',
++      source_statuses: sourceStatuses,
+       scanned: targets.length,
+       skipped: skippedCount,
+       found: totalFound,
+@@ -4035,7 +4058,7 @@ async function main() {
+       duplicates: totalDupes,
+       added: verifiedOffers.length,
+       added_urls: verifiedOffers.map(offer => offer.url),
+-      errors: errors.map(({ company, error }) => ({ company, error })),
++      errors: errors.map(({ company, error, source }) => ({ company, error, ...(source ? { source } : {}) })),
+       unverified_zero: unverifiedZeroTargets,
+       dry_run: dryRun,
+     }, errors.length > 0 ? 2 : 0);
+diff --git a/tests/scan-json-receipt.test.mjs b/tests/scan-json-receipt.test.mjs
+index 3f360a0..cda29df 100644
 --- a/tests/scan-json-receipt.test.mjs
 +++ b/tests/scan-json-receipt.test.mjs
-@@ -112,6 +112,8 @@
+@@ -112,6 +112,8 @@ test('--json emits exactly one clean successful receipt', () => {
      assert.deepEqual(receipt, {
        version: 'careerops.scan.receipt@1',
        date: receipt.date,

@@ -1,12 +1,12 @@
 {
   "name": "career-ops-plugin-ru-market",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "engines": {"node": ">=18"},
   "license": "MIT",
   "scripts": {
-    "test": "node test/run.mjs && node test/getmatch.mjs && node test/helloworld.mjs && node test/smoke.mjs",
+    "test": "node test/run.mjs && node test/getmatch.mjs && node test/helloworld.mjs && node test/untrusted.mjs && node test/smoke.mjs",
     "health": "node scripts/health.mjs",
     "test:integration": "bash test/integration.sh && bash test/browser.sh",
     "test:dom": "HH_TEST_DOM=1 bash test/browser.sh"

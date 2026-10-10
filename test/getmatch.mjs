@@ -27,7 +27,7 @@ test('getmatch: only ordinary active vacancies and allowed metadata', () => {
   assert.equal(jobs[0].url, 'https://getmatch.ru/vacancies/601-python-platform-engineer');
   assert.equal(jobs[0].company, 'Synthetic Platform');
   assert.match(jobs[0].location, /Россия.*Удалённо/);
-  assert.deepEqual(jobs[0].salary, { from: 250000, to: 350000, currency: 'RUB' });
+  assert.deepEqual(jobs[0].salary, { min: 250000, max: 350000, currency: 'RUB' });
   assert.match(jobs[0].note, /salary taxes: net/);
   assert.equal(jobs[0].postedAt, Date.parse('2026-10-07T10:00:00+03:00'));
   assert(!('application' in jobs[0])); assert(!('description' in jobs[0]));
@@ -123,11 +123,31 @@ test('getmatch: first/late access failure, no retries, safe diagnostics and sour
   let routeCalls = 0;
   await assert.rejects(paginate('getmatch', ['a', 'b'], 2, async () => { routeCalls++; throw statusError(403); }, ctx()), /403/);
   assert.equal(routeCalls, 1);
-  const merged = await plugin.provider.fetch({ ru_market: { source: 'all', sources: { hh: { enabled: false }, habr_career: { enabled: false }, geekjob: { enabled: false }, getmatch: { enabled: true }, trudvsem: { enabled: true } } } }, ctx(async value => {
+  const merged = await plugin.provider.fetch({ ru_market: { source: 'all', sources: { habr_career: { enabled: false }, geekjob: { enabled: false }, getmatch: { enabled: true }, trudvsem: { enabled: true } } } }, ctx(async value => {
     if (value.includes('getmatch.ru')) throw statusError(403);
     return { status: '200', meta: { total: 0 }, results: { vacancies: [] } };
   }));
   assert.equal(merged.sourceStatuses.find(s => s.source === 'getmatch').status, 'failed');
+});
+test('getmatch: experimental filters are opt-in; default requests are unchanged', async () => {
+  const urls = [];
+  const run = async (options, pages = 1) => {
+    urls.length = 0;
+    const config = parseConfig({ ru_market: { source: 'getmatch', sources: { getmatch: { enabled: true, max_pages: pages, per_page: 1, ...options } } } }).sources.getmatch;
+    await adapters.getmatch(config, ctx(async value => { urls.push(value); return page(urls.length - 1, 602 + urls.length); }));
+    return urls.slice();
+  };
+  assert.deepEqual(await run({}, 2), ['https://getmatch.ru/api/offers?p=1&offset=0&limit=1', 'https://getmatch.ru/api/offers?p=2&offset=1&limit=1']);
+  assert.deepEqual(await run({ sa: 300000, pa: '7', se: ['senior', 'middle'], l: ['Москва', 'Remote'] }),
+    ['https://getmatch.ru/api/offers?p=1&offset=0&limit=1&sa=300000&pa=7&se=senior&se=middle&l=%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0&l=Remote']);
+  assert.deepEqual(await run({ l: 'Berlin' }), ['https://getmatch.ru/api/offers?p=1&offset=0&limit=1&l=Berlin']);
+  for (const url of urls) assert.doesNotThrow(() => assertRequestUrl(url));
+  const keys = new Set(); for (const options of [{ sa: 1 }, { pa: 'x' }, { se: ['a'] }, { l: ['a'] }]) (await run(options)).forEach(u => new URL(u).searchParams.forEach((_, k) => keys.add(k)));
+  assert.deepEqual([...keys].sort(), ['l', 'limit', 'offset', 'p', 'pa', 'sa', 'se']);
+  for (const bad of [{ sa: [1] }, { pa: ['1'] }, { sa: '' }, { se: [] }, { l: ['a&b=1'] }, { l: Array(11).fill('a') }, { se: [3, {}] }, { s: 'x' }, { sp: ['x'] }, { from_date: '2026-01-01' }, { q: 'python' }]) {
+    assert.throws(() => parseConfig({ ru_market: { source: 'getmatch', sources: { getmatch: { enabled: true, ...bad } } } }), e => e.category === 'config', JSON.stringify(bad));
+  }
+  assert.equal(cfg().sa, undefined);
 });
 test('getmatch: health requires explicit selection and makes one request without retries', async () => {
   let calls = 0;

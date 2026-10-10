@@ -1,21 +1,12 @@
+# HH is collected by the browser companion, not by this plugin: see examples/hh-browser.yml.
 job_boards:
   - name: Russian-language job boards
     provider: ru-market
     ru_market:
       source: all
-      primary_source_order: [hh, habr-career, geekjob]
+      primary_source_order: [habr-career, geekjob]
       max_pages: 3
       sources:
-        hh:
-          enabled: true
-          mode: api
-          max_pages: 2
-          host: hh.ru
-          locale: RU
-          area: ""
-          schedule: remote
-          queries:
-            - Python backend
         habr_career:
           enabled: true
           mode: html
@@ -39,6 +30,11 @@ job_boards:
           mode: api
           max_pages: 1
           per_page: 20
+          # Experimental server-side filters, UNVERIFIED against the live API and off by default (docs/getmatch.md):
+          # sa: 300000
+          # pa: 7
+          # se: [senior]
+          # l: [Москва]
         helloworld_rs:
           enabled: false # opt-in Serbian HTML listings; see docs/helloworld.md
           mode: html

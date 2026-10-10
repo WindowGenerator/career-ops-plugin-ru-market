@@ -40,7 +40,7 @@ JS
 cat > "$test_root/bin/curl" <<'SH'
 #!/bin/sh
 while [ "$#" -gt 0 ]; do
-  if [ "$1" = '--output' ]; then case "$request_url" in *core-contract.patch) cp "$HH_CONTRACT_FIXTURE" "$2" ;; *local-parser.patch) cp "$HH_PATCH_FIXTURE" "$2" ;; *) cp "$HH_INSTALL_FIXTURE" "$2" ;; esac; exit; fi
+  if [ "$1" = '--output' ]; then case "$request_url" in *core-contract.patch) cp "$HH_CONTRACT_FIXTURE" "$2" ;; *core-contract-0.6.patch) cp "$HH_PREVIOUS_CONTRACT_FIXTURE" "$2" ;; *lib/untrusted.mjs) cp "$HH_LIB_FIXTURE" "$2" ;; *local-parser.patch) cp "$HH_PATCH_FIXTURE" "$2" ;; *) cp "$HH_INSTALL_FIXTURE" "$2" ;; esac; exit; fi
   case "$1" in https:*) request_url="$1" ;; esac
   shift
 done
@@ -49,6 +49,8 @@ SH
 chmod +x "$test_root/bin/curl"
 export HH_CONTRACT_FIXTURE="$plugin_root/companion/core-contract.patch"
 export HH_PATCH_FIXTURE="$plugin_root/companion/local-parser.patch"
+export HH_PREVIOUS_CONTRACT_FIXTURE="$plugin_root/companion/core-contract-0.6.patch"
+export HH_LIB_FIXTURE="$plugin_root/lib/untrusted.mjs"
 export HH_INSTALL_FIXTURE="$plugin_root/companion/scan-hh.mjs.txt"
 export PATH="$test_root/bin:$PATH"
 # Match release packaging: stamp the sole source, then copy the legacy asset.
@@ -65,6 +67,7 @@ sh install.sh
 printf 'add\n' > expected.log
 cmp cli.log expected.log
 cmp scripts/ru-market/scan-hh.mjs "$HH_INSTALL_FIXTURE"
+cmp scripts/ru-market/lib/untrusted.mjs "$HH_LIB_FIXTURE"
 # Re-running install detects the existing plugin and replaces it.
 printf 'old plugin\n' > plugins.local/ru-market/index.mjs
 sh install.sh
@@ -90,6 +93,26 @@ git apply --reverse "$HH_CONTRACT_FIXTURE"
 git apply "$HH_PATCH_FIXTURE"
 sh update.sh
 git apply --reverse --check "$HH_CONTRACT_FIXTURE"
+# Upgrade from the 0.6.0 contract patch and a 0.6.0-style state file without the shared module.
+git apply --reverse "$HH_CONTRACT_FIXTURE"
+git apply "$HH_PREVIOUS_CONTRACT_FIXTURE"
+mv scripts/ru-market/lib "$test_root/lib-saved"
+node --input-type=module -e "import fs from 'node:fs'; const f='scripts/ru-market/scan-hh.install.json'; const s=JSON.parse(fs.readFileSync(f)); delete s.files; fs.writeFileSync(f, JSON.stringify(s)+'\n');"
+sh update.sh > upgrade06.log 2>&1
+grep -q 'Upgraded core contract' upgrade06.log
+git apply --reverse --check "$HH_CONTRACT_FIXTURE"
+cmp scripts/ru-market/lib/untrusted.mjs "$HH_LIB_FIXTURE"
+# A locally edited or unmanaged shared module blocks the update, like the tool itself.
+printf '\n// user edit\n' >> scripts/ru-market/lib/untrusted.mjs
+if sh update.sh > refusal-lib.log 2>&1; then echo 'update overwrote local shared module changes' >&2; exit 1; fi
+grep -q 'Local or unmanaged changes in scripts/ru-market/lib/untrusted.mjs' refusal-lib.log
+grep -q 'user edit' scripts/ru-market/lib/untrusted.mjs
+cp "$HH_LIB_FIXTURE" scripts/ru-market/lib/untrusted.mjs
+node --input-type=module -e "import fs from 'node:fs'; const f='scripts/ru-market/scan-hh.install.json'; const s=JSON.parse(fs.readFileSync(f)); delete s.files; fs.writeFileSync(f, JSON.stringify(s)+'\n');"
+if sh update.sh > refusal-unmanaged.log 2>&1; then echo 'update accepted unmanaged shared module' >&2; exit 1; fi
+grep -q 'Local or unmanaged changes in scripts/ru-market/lib/untrusted.mjs' refusal-unmanaged.log
+rm -rf scripts/ru-market/lib
+sh update.sh
 printf '\n// user edit\n' >> scripts/ru-market/scan-hh.mjs
 if sh update.sh > refusal.log 2>&1; then echo 'update overwrote local changes' >&2; exit 1; fi
 grep -q 'Local or unmanaged changes' refusal.log
@@ -104,4 +127,4 @@ cp scripts/ru-market/scan-hh.mjs previous-tool.mjs
 if sh update.sh > incompatible.log 2>&1; then echo 'incompatible core accepted' >&2; exit 1; fi
 cmp providers/local-parser.mjs previous-parser.mjs
 cmp scripts/ru-market/scan-hh.mjs previous-tool.mjs
-echo 'companion install/update: auto-detection, rollback, pinned source, patch migration and local edit protection OK'
+echo 'companion install/update: auto-detection, rollback, pinned source, patch migration, shared module and local edit protection OK'

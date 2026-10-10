@@ -1,3 +1,34 @@
+## 0.7.0 - HH via browser companion only, prompt-injection guard (BREAKING)
+
+Breaking change: the HH API adapter is removed.
+
+- Removed `lib/hh.mjs`, `fixtures/hh`, `HH_ACCESS_TOKEN`, the `api.hh.ru` host and the `hh` source.
+  `hh` in `primary_source_order`, `source: hh` or `sources.hh` now fails with a `config` error that
+  points to `local-parser`. Default sources are `habr-career` and `geekjob`; allowed
+  `primary_source_order` lengths are 2, 4, 5 or 6 (previously 3, 5, 6 or 7).
+- Migration: (1) remove `hh` from `primary_source_order` and `sources.hh` from `portals.yml`;
+  (2) drop `HH_ACCESS_TOKEN` from `.env`; (3) add a separate `HH browser` entry with an
+  `hh_browser` block and a `local-parser` parser (see `examples/hh-browser.yml`, `docs/hh.md`);
+  (4) rerun `install.sh`: it installs the companion, the shared module
+  `scripts/ru-market/lib/untrusted.mjs` (refused if locally modified) and upgrades the core patch.
+  Core updates may require reinstalling the patch.
+- Companion: `hh_browser` config in its own entry, server-side `search_field`, `excluded_text`,
+  `professional_role`, `only_with_salary` (unverified against live HH), `timeout_ms` deadline,
+  `--no-artifacts`. Blocks, timeouts and partial runs exit 0 with partial jobs and `sourceStatuses`
+  (`partial`/`failed`, reason, completed pages), which core reports as source errors.
+- New `lib/untrusted.mjs`: invisible Unicode, bidi and control characters, HTML comments removed,
+  length caps, English/Russian instruction patterns give `injectionFlags` (jobs kept). Counts appear
+  as `injection_flagged` in `sourceStatuses`. With the core patch and `trust_filter` enabled, one
+  `prompt-injection-suspected` trust flag and trustScore -30 per job.
+- `salary` is now `{min, max, currency}` (was `{from, to}`); `compensation` stays the source of truth.
+- New optional Job fields `employment` and `professional_role` (filled only from explicit
+  source labels: SuperJob and Работа России, unverified field names; unknown otherwise).
+- Combined core patch: local-parser passes `employment`, `professional_role`, `injectionFlags`,
+  accepts `{min,max}` salary so `salary_filter` uses it; trust validator rule for injection flags.
+- Experimental, unverified, opt-in getmatch filters `sa`, `pa`, `se`, `l`.
+- Note: core processes `portals.yml` entries in parallel, so duplicates between entries are won by
+  the entry that finishes first, not the first in the file (see README).
+
 ## 0.6.0 — optional HelloWorld.rs
 
 - Added opt-in `helloworld-rs` HTML keyword search with bounded pagination,

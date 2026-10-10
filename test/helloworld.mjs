@@ -64,7 +64,8 @@ test('URL and pagination validation prevents host/query/path drift and nonadvanc
 });
 test('config is opt-in, requires queries and preserves legacy order lengths', () => {
   assert.deepEqual(parseConfig({ ru_market: {} }).selected, DEFAULT_SOURCES);
-  for (const n of [3, 5, 6, 7]) assert.deepEqual(parseConfig({ ru_market: { primary_source_order: SOURCES.slice(0, n) } }).order, SOURCES);
+  for (const n of [2, 4, 5, 6]) assert.deepEqual(parseConfig({ ru_market: { primary_source_order: SOURCES.slice(0, n) } }).order, SOURCES);
+  for (const n of [3, 7]) assert.throws(() => parseConfig({ ru_market: { primary_source_order: ['hh', ...SOURCES].slice(0, n) } }), e => e.category === 'config');
   for (const patch of [{ queries: undefined }, { queries: [] }, { queries: [''] }, { queries: ['a'.repeat(501)] }, { mode: 'api' }, { per_page: 20 }]) assert.throws(() => parseConfig(entry(patch)));
   assert.deepEqual(parseConfig(entry({ queries: [' Python ', 'Python'], mode: 'auto' })).sources['helloworld-rs'].queries, ['Python']);
 });

@@ -1,13 +1,13 @@
 {
   "id": "ru-market",
   "name": "ru-market",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "apiVersion": 1,
-  "description": "Discover public Russian-language vacancies across HH, Habr Career, GeekJob, SuperJob, Работа России and optional getmatch and Serbian HelloWorld.rs.",
+  "description": "Discover public Russian-language vacancies across Habr Career, GeekJob, SuperJob, Работа России and optional getmatch and Serbian HelloWorld.rs.",
   "hooks": ["provider"],
   "requiredEnv": [],
-  "optionalEnv": ["HH_ACCESS_TOKEN", "SUPERJOB_API_KEY"],
-  "allowedHosts": ["api.hh.ru", "career.habr.com", "geekjob.ru", "api.superjob.ru", "opendata.trudvsem.ru", "getmatch.ru", "www.helloworld.rs"],
+  "optionalEnv": ["SUPERJOB_API_KEY"],
+  "allowedHosts": ["career.habr.com", "geekjob.ru", "api.superjob.ru", "opendata.trudvsem.ru", "getmatch.ru", "www.helloworld.rs"],
   "skill": "skill.md",
   "humanInTheLoop": true,
   "homepage": "https://github.com/WindowGenerator/career-ops-plugin-ru-market"

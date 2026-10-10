@@ -40,11 +40,11 @@ dns.lookup = async () => [{ address: '93.184.216.34', family: 4 }];
 syncBuiltinESMExports();
 globalThis.fetch = async value => {
   const url = new URL(value);
-  const source = { 'api.hh.ru': 'hh', 'career.habr.com': 'habr-career', 'geekjob.ru': 'geekjob', 'getmatch.ru': 'getmatch', 'www.helloworld.rs': 'helloworld-rs' }[url.hostname];
+  const source = { 'career.habr.com': 'habr-career', 'geekjob.ru': 'geekjob', 'getmatch.ru': 'getmatch', 'www.helloworld.rs': 'helloworld-rs' }[url.hostname];
   if (!source) throw new Error(`Unexpected integration request: ${url.hostname}`);
-  const ext = ['hh', 'getmatch'].includes(source) ? 'json' : 'html';
+  const ext = source === 'getmatch' ? 'json' : 'html';
   return new Response(readFileSync(`plugins.local/ru-market/fixtures/${source}/normal.${ext}`, 'utf8'), {
-    status: 200, headers: { 'content-type': ['hh', 'getmatch'].includes(source) ? 'application/json' : 'text/html' },
+    status: 200, headers: { 'content-type': source === 'getmatch' ? 'application/json' : 'text/html' },
   });
 };
 JS
@@ -58,10 +58,10 @@ import { readFileSync } from 'node:fs';
 const pipeline = readFileSync('data/pipeline.md', 'utf8');
 const history = readFileSync('data/scan-history.tsv', 'utf8');
 const receipt = JSON.parse(readFileSync('scan-receipt.json', 'utf8'));
-assert(receipt.source_statuses.some(s => s.source === 'hh' && typeof s.query === 'string' && s.queryId));
-assert.match(pipeline, /https:\/\/hh.ru\/vacancy\/101/);
-assert.match(pipeline, /cross-listed: Habr Career/);
+assert(receipt.source_statuses.some(s => s.source === 'habr-career' && typeof s.query === 'string' && s.queryId));
+assert(receipt.source_statuses.every(s => s.source !== 'hh'));
 assert.match(pipeline, /https:\/\/career.habr.com\/vacancies\/201/);
+assert.match(pipeline, /cross-listed: GeekJob/);
 assert.match(pipeline, /https:\/\/geekjob.ru\/vacancy\/000000000000000000000301/);
 assert.match(pipeline, /250000|250,000|250 000/);
 assert.match(history, /ru-market-api/);
@@ -72,3 +72,42 @@ assert(receipt.source_statuses.some(s => s.source === 'helloworld-rs' && s.query
 assert(!pipeline.includes('Synthetic description intentionally not copied'));
 console.log('integration: scaffold, audit, consent, scan preview, pipeline and history OK');
 JS
+
+# Cross-entry dedup. core runs entries in parallel, so the winner is the first to finish, not the first in the file;
+# running the HH entry first as its own scan makes HH deterministic: the later ru-market scan drops the company+role duplicate.
+mkdir -p scripts/ru-market
+cat > scripts/ru-market/hh-stub.mjs <<'JS'
+console.log(JSON.stringify({ jobs: [{ title: 'Python Backend Engineer', url: 'https://hh.ru/vacancy/101', company: 'Тестовая компания', source: 'hh',
+  injectionFlags: ['conceal'] }], sourceStatuses: [{ source: 'hh', status: 'ok', completed_pages: 1, count: 1 }] }));
+JS
+cat > portals.yml <<'YAML'
+trust_filter:
+  enabled: true
+job_boards:
+  - name: HH browser
+    provider: local-parser
+    careers_url: https://hh.ru/search/vacancy
+    parser:
+      command: node
+      script: scripts/ru-market/hh-stub.mjs
+  - name: RU fixture dedup
+    provider: ru-market
+    ru_market:
+      source: all
+      max_pages: 1
+YAML
+rm -f data/pipeline.md data/scan-history.tsv
+node --import ./preload.mjs scan.mjs --json --company 'HH browser' > dedup-hh.json 2> dedup-hh.log
+node --import ./preload.mjs scan.mjs --json --company 'RU fixture' > dedup-ru.json 2> dedup-ru.log
+node --input-type=module <<'JS'
+import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
+const pipeline = readFileSync('data/pipeline.md', 'utf8');
+assert.match(pipeline, /https:\/\/hh.ru\/vacancy\/101/);
+assert(!pipeline.includes('career.habr.com/vacancies/201'), 'duplicate from ru-market must be dropped, HH kept');
+assert.match(pipeline, /prompt-injection-suspected/);
+const ru = JSON.parse(readFileSync('dedup-ru.json', 'utf8'));
+assert.equal(ru.added, 0); assert(ru.duplicates >= 1);
+console.log('integration: HH scanned first keeps its job over the ru-market duplicate; injection flag in trust output');
+JS
+CAREER_OPS_ROOT="$test_root" node "$plugin_root/test/core-patch.mjs"
