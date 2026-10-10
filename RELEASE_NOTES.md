@@ -22,7 +22,7 @@ Breaking change: the HH API adapter is removed.
   `prompt-injection-suspected` trust flag and trustScore -30 per job.
 - `salary` is now `{min, max, currency}` (was `{from, to}`); `compensation` stays the source of truth.
 - New optional Job fields `employment` and `professional_role` (filled only from explicit
-  source labels: SuperJob and Работа России, unverified field names; unknown otherwise).
+  source labels: SuperJob and Trudvsem, unverified field names; unknown otherwise).
 - Combined core patch: local-parser passes `employment`, `professional_role`, `injectionFlags`,
   accepts `{min,max}` salary so `salary_filter` uses it; trust validator rule for injection flags.
 - Experimental, unverified, opt-in getmatch filters `sa`, `pa`, `se`, `l`.
@@ -48,7 +48,7 @@ Breaking change: the HH API adapter is removed.
 - Added config-driven HH batch collection, cache import, HH-only scan config,
   query diagnostics/provenance, anonymous context reuse, checkpoint/resume,
   browser preflight and version reporting. API/browser routes remain separate.
-- Fixed lower-bound salary parsing when tax prose contains “до”. Explicit
+- Fixed lower-bound salary parsing when tax prose contains `до` ("up to"). Explicit
   compensation preserves month/year/hour/shift units and gross/net/unknown;
   the reviewed core patch adds filtering and formatting without annualization.
 - Install/update protect local tool edits, upgrade the previous parser patch
@@ -94,47 +94,46 @@ Breaking change: the HH API adapter is removed.
 
 ## 0.3.1
 
-Исправлена пагинация «Работы России»: параметр `offset` означает номер
-страницы. Раньше запрос второй страницы с `limit=100` отправлял `offset=100`
-и получал HTTP 500. Диагностика теперь указывает номер поискового запроса,
-страницу и HTTP-статус без текста вакансий и поисковой строки.
+Fixed Trudvsem (Work in Russia) pagination: the `offset` parameter means the page
+number. Previously a request for the second page with `limit=100` sent `offset=100`
+and received HTTP 500. Diagnostics now give the search query number, the page and
+the HTTP status without vacancy text or the search string.
 
-Habr Career больше не добавляет рейтинг к названию компании и не записывает
-прогноз «Похожие специалисты получают…» как зарплату вакансии. Живой поиск
-«Работы России» после исправления вернул 200 уникальных вакансий за две
-страницы; публичная выдача Habr проверена отдельно. HH по-прежнему отвечает
-`403`; SuperJob без ключа приложения не проверен.
+Habr Career no longer appends the rating to the company name and no longer records
+the forecast `Похожие специалисты получают…` ("similar specialists receive...") as the
+vacancy salary. The live Trudvsem search after the fix returned 200 unique vacancies
+over two pages; the public Habr listing was checked separately. HH still answers
+`403`; SuperJob without an application key was not verified.
 
 ## 0.3.0
 
-Добавлены SuperJob и «Работа России» через публичные API. Оба источника
-выключены по умолчанию; для SuperJob требуется `SUPERJOB_API_KEY` приложения.
-Проверен живой запрос к «Работе России» с поиском Python. SuperJob проверен
-локальными тестами без пользовательского ключа; живой доступ пока не проверен.
+Added SuperJob and Trudvsem (Work in Russia) through public APIs. Both sources are
+disabled by default; SuperJob needs the application's `SUPERJOB_API_KEY`.
+A live Trudvsem request with a Python search was checked. SuperJob was checked with
+local tests without a user key; live access has not been verified yet.
 
 ## 0.2.1
 
-Сокращён README. В релиз добавлены `install.sh` и `update.sh` с закреплённым
-SHA релизного коммита. Скрипты используют штатный CLI career-ops и включают
-плагин после установки.
+Shortened the README. The release now includes `install.sh` and `update.sh` with the
+pinned SHA of the release commit. The scripts use the standard career-ops CLI and
+enable the plugin after installation.
 
 ## 0.2.0
 
-Проверенный коммит реализации: `8f2435b7d7cf018e3cc169b996181e2c0f0030a9`.
-Точный SHA релизного коммита указан в опубликованных заметках GitHub и
-приложенном `ru-market.json`.
+Verified implementation commit: `8f2435b7d7cf018e3cc169b996181e2c0f0030a9`.
+The exact SHA of the release commit is given in the published GitHub notes and the
+attached `ru-market.json`.
 
-HH API принимает `HH_ACCESS_TOKEN` зарегистрированного приложения из окружения.
-HTML-поиск HH не добавлен: условия сайта запрещают автоматизированный парсинг.
-После первого отказа доступа HH остальные его запросы прекращаются. Provider
-возвращает статус каждого источника для отчёта о частичном результате. Причина
-наблюдавшегося 403 остаётся неизвестной; токен не гарантирует доступ.
+The HH API accepts the registered application's `HH_ACCESS_TOKEN` from the
+environment. HH HTML search was not added: the site terms forbid automated parsing.
+After the first HH access refusal its remaining requests are stopped. The provider
+returns the status of each source for the partial-result report. The cause of the
+observed 403 remains unknown; a token does not guarantee access.
 
-Совместный скан продолжает Habr Career и GeekJob после отказа HH. При
-обновлённом scanner core итоговый JSON содержит `status: partial`,
-`source_statuses` по площадкам и ошибку HH. Локальная правка core сохранена
-отдельным коммитом `5ab6b06f4ea46ade51a7c7fc3a0456cba6f9aa75`;
-она не входит в этот плагин.
+A combined scan continues with Habr Career and GeekJob after an HH refusal. With an
+updated core scanner the final JSON contains `status: partial`, `source_statuses`
+per board and the HH error. The local core change was saved as a separate commit
+`5ab6b06f4ea46ade51a7c7fc3a0456cba6f9aa75`; it is not part of this plugin.
 
 ## 0.1.0
 

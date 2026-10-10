@@ -1,35 +1,57 @@
-# ATS и платформы вакансий для Армении
+# ATS and vacancy platforms for Armenia
 
-Первичная проверка на 2 октября 2026 года. Здесь ATS означает систему приёма и учёта откликов работодателя. Часть армянских площадок совмещает ATS с общей доской вакансий; их нужно проверять как отдельные источники.
+Status: Reference
+Date: 2026-10-02
+Type: research
 
-В самом `career-ops` уже есть провайдеры `greenhouse`, `lever` и `workable` (`../career-ops/providers/`). Для Армении им нужны проверенные компании или доски, а не новые адаптеры. Отдельных провайдеров `workx.am`, `staff.am` и `job.am` в `career-ops` пока нет.
+## Question
 
-| Кандидат | Подтверждение вакансий в Армении | Открытый способ чтения | Приоритет |
+Which ATS and vacancy platforms give an open way to read vacancies located in Armenia, and under what terms? Initial check on 2 October 2026. Here ATS means an employer's system for receiving and tracking applications. Some Armenian platforms combine an ATS with a general vacancy board; they must be checked as separate sources.
+
+## Findings
+
+`career-ops` already has the providers `greenhouse`, `lever` and `workable` (`../career-ops/providers/`). For Armenia they need verified companies or boards, not new adapters. `career-ops` has no separate providers for `workx.am`, `staff.am` and `job.am` yet.
+
+| Candidate | Evidence of vacancies in Armenia | Open way to read | Priority |
 | --- | --- | --- | --- |
-| [Greenhouse](https://docs.greenhouse.io/job-board.html) | [JetBrains публикует вакансии с локацией Yerevan](https://job-boards.greenhouse.io/jetbrains) | Официальный Job Board API, публичный `GET /v1/boards/{board_token}/jobs`, без ключа | Высокий |
-| [Lever](https://github.com/lever/postings-api) | [Provectus](https://jobs.lever.co/provectus?location=Yerevan) и [Ajax Systems](https://jobs.lever.co/ajax?location=Yerevan) показывают вакансии для Еревана | Официальный Postings API для опубликованных вакансий | Высокий |
-| [workx.am](https://workx.am/api) | Армянская платформа с вакансиями и учётом откликов | Официальный публичный MCP `https://workx.am/mcp`, инструменты `search-jobs` и `get-job-details`; указан лимит 60 запросов в минуту | Первый кандидат на реализацию |
-| [Workable](https://help.workable.com/hc/en-us/articles/115012771647-Using-the-Workable-API-to-create-a-careers-page) | [CloudLinux указывает Yerevan среди локаций](https://apply.workable.com/cloudlinux-1/j/451EC658A2/apply/) | Официальная документация описывает публичные endpoints только для опубликованных вакансий; основной API требует токен работодателя | Средний |
-| [staff.am](https://staff.am/en/jobs/software-development) | Публичная IT-выдача и [карточки](https://staff.am/jobs/software-development/software-developer-mid-senior); сервис [отслеживает отклики](https://staff.am/en/how-we-work) | Публичные HTML и [sitemap](https://staff.am/assets/staff-am-sitemap.xml); условия ограничивают автоматический сбор | Технический кандидат с явным конфликтом условий |
-| [job.am](https://job.am/en/jobs?i=17) | Публичная IT-выдача; [ATS заявлена в тарифах](https://job.am/en/static/pricing) | Публичные HTML и [sitemap вакансий](https://job.am/sitemap/jobs.xml); условия ограничивают воспроизведение | Технический кандидат с ограничением на контент |
+| [Greenhouse](https://docs.greenhouse.io/job-board.html) | [JetBrains publishes vacancies located in Yerevan](https://job-boards.greenhouse.io/jetbrains) | Official Job Board API, public `GET /v1/boards/{board_token}/jobs`, no key | High |
+| [Lever](https://github.com/lever/postings-api) | [Provectus](https://jobs.lever.co/provectus?location=Yerevan) and [Ajax Systems](https://jobs.lever.co/ajax?location=Yerevan) show vacancies for Yerevan | Official Postings API for published vacancies | High |
+| [workx.am](https://workx.am/api) | Armenian platform with vacancies and application tracking | Official public MCP `https://workx.am/mcp`, tools `search-jobs` and `get-job-details`; a limit of 60 requests per minute is stated | First implementation candidate |
+| [Workable](https://help.workable.com/hc/en-us/articles/115012771647-Using-the-Workable-API-to-create-a-careers-page) | [CloudLinux lists Yerevan among its locations](https://apply.workable.com/cloudlinux-1/j/451EC658A2/apply/) | Official documentation describes public endpoints only for published vacancies; the main API needs an employer token | Medium |
+| [staff.am](https://staff.am/en/jobs/software-development) | Public IT listing and [cards](https://staff.am/jobs/software-development/software-developer-mid-senior); the service [tracks applications](https://staff.am/en/how-we-work) | Public HTML and [sitemap](https://staff.am/assets/staff-am-sitemap.xml); terms restrict automated collection | Technical candidate with an explicit terms conflict |
+| [job.am](https://job.am/en/jobs?i=17) | Public IT listing; [ATS is advertised in the pricing](https://job.am/en/static/pricing) | Public HTML and [vacancy sitemap](https://job.am/sitemap/jobs.xml); terms restrict reproduction | Technical candidate with a content restriction |
 
-Не путать [ats.am](https://ats.am/images/ats-eng.pdf) с системой найма: найденный сайт предлагает телефонию и поддержку клиентов.
+Do not confuse [ats.am](https://ats.am/images/ats-eng.pdf) with a hiring system: the site found offers telephony and customer support.
 
-## Условия использования и решение
+### Terms of use
 
-Проверка публичных условий на 2 октября 2026 года:
+Public terms checked on 2 October 2026:
 
-| Источник | Что разрешено или ограничено | Решение для career-ops |
+| Source | What is permitted or restricted | Decision for career-ops |
 | --- | --- | --- |
-| workx.am | [Документация MCP](https://workx.am/api) прямо приглашает сторонние AI-агенты искать вакансии через публичный read-only endpoint без входа; указан лимит 60 запросов в минуту. [Условия](https://workx.am/en/terms) запрещают несанкционированный доступ и сбор данных пользователей без разрешения. Отдельная лицензия на перепубликацию полных текстов вакансий не указана. | Можно прототипировать через документированные `search-jobs` и `get-job-details`, только для вакансий. Соблюдать лимит, давать каноническую ссылку, не собирать профили кандидатов и не предполагать право на широкую перепубликацию. Перед выпуском проверить формат выдачи и объём сохраняемого текста. |
-| staff.am | [Условия](https://staff.am/en/site/terms-of-use) прямо ограничивают автоматический поиск и сбор данных агентами без письменного разрешения. [robots.txt](https://staff.am/robots.txt) допускает обход общих страниц и поиск со ссылками и короткими выдержками, но не отменяет условия сайта; URL с произвольными query-параметрами в основном закрыты для роботов, `?page=` разрешён. | Исследовать публичный sitemap и страницы без входа как технический вариант для личного поиска. Ограничить сохраняемые данные метаданными и ссылкой; зафиксировать, что соответствие условиям площадки не подтверждено. |
-| job.am | [Условия](https://job.am/terms) запрещают несанкционированное воспроизведение и дальнейшее распространение материалов, а также коммерческое использование части сервиса. Прямого разрешения на автоматический забор вакансий или официального публичного API/RSS не найдено. [robots.txt](https://job.am/robots.txt) разрешает общие страницы и указывает sitemap вакансий, но закрывает `/api/*` и ряд служебных URL. | Исследовать публичный sitemap и карточки как источник метаданных и канонических ссылок. Не обращаться к закрытым в robots.txt путям и не переносить полные описания; соответствие условиям площадки не подтверждено. |
+| workx.am | The [MCP documentation](https://workx.am/api) explicitly invites third-party AI agents to search vacancies through a public read-only endpoint without login; a limit of 60 requests per minute is stated. The [terms](https://workx.am/en/terms) prohibit unauthorized access and collecting user data without permission. No separate licence for republishing full vacancy texts is stated. | Can be prototyped through the documented `search-jobs` and `get-job-details`, for vacancies only. Respect the limit, give a canonical link, do not collect candidate profiles and do not assume a right to wide republication. Before release, check the output format and the volume of stored text. |
+| staff.am | The [terms](https://staff.am/en/site/terms-of-use) explicitly restrict automated search and data collection by agents without written permission. [robots.txt](https://staff.am/robots.txt) permits crawling general pages and search with links and short excerpts, but does not override the site terms; URLs with arbitrary query parameters are mostly closed to robots, `?page=` is allowed. | Study the public sitemap and pages without login as a technical option for personal search. Limit stored data to metadata and a link; record that compliance with the platform terms is not confirmed. |
+| job.am | The [terms](https://job.am/terms) prohibit unauthorized reproduction and further distribution of materials, as well as commercial use of part of the service. No direct permission for automatic collection of vacancies or an official public API/RSS was found. [robots.txt](https://job.am/robots.txt) allows general pages and lists the vacancy sitemap, but closes `/api/*` and a number of service URLs. | Study the public sitemap and cards as a source of metadata and canonical links. Do not access paths closed in robots.txt and do not carry over full descriptions; compliance with the platform terms is not confirmed. |
 
-## План добавления отсутствующих провайдеров
+### Plan for adding the missing providers
 
-1. **workx.am:** сделать один ограниченный вызов официального MCP `search-jobs`, затем `get-job-details` для одной вакансии. Проверить активность вакансий, стабильность URL, фильтры города и профессии, пагинацию, поля ответа и отсутствие данных кандидатов. Если результат подходит, добавить необязательный адаптер и только `workx.am` в `allowedHosts`; ограничить запросы ниже опубликованного лимита. Проверить пустую и ошибочную выдачу, дедупликацию и совместимость текущей конфигурации.
-2. **job.am:** проверить sitemap вакансий и одну публичную карточку без входа: актуальность, ссылки, метаданные, частоту изменений. Если данные пригодны, спроектировать необязательный адаптер для личного поиска с короткими полями и ссылкой на оригинал, без полного текста. Сохранить в документации ограничение из условий; техническая доступность не означает разрешения на использование.
-3. **staff.am:** аналогично проверить публичный sitemap и карточку. Выяснить, можно ли получать полезную выдачу без закрытых query-URL. При проектировании адаптера явно отметить конфликт с запретом автоматического сбора в условиях площадки и не представлять его как разрешённый провайдер.
-4. Проверить существующие провайдеры Greenhouse для JetBrains и Lever для Provectus на актуальных вакансиях Армении; новых адаптеров для них не требуется. Во всех источниках отличать возможность работать из Армении от физического расположения вакансии.
+1. **workx.am:** make one bounded call of the official MCP `search-jobs`, then `get-job-details` for one vacancy. Check vacancy activity, URL stability, city and profession filters, pagination, response fields and the absence of candidate data. If the result is suitable, add an optional adapter and only `workx.am` to `allowedHosts`; keep requests below the published limit. Check empty and error output, deduplication and compatibility with the current configuration.
+2. **job.am:** check the vacancy sitemap and one public card without login: freshness, links, metadata, change frequency. If the data is usable, design an optional adapter for personal search with short fields and a link to the original, without full text. Keep the terms restriction in the documentation; technical availability does not mean permission to use.
+3. **staff.am:** check the public sitemap and a card in the same way. Find out whether a useful listing can be obtained without closed query URLs. When designing the adapter, explicitly mark the conflict with the ban on automated collection in the platform terms and do not present it as a permitted provider.
+4. Check the existing providers Greenhouse for JetBrains and Lever for Provectus on current Armenian vacancies; new adapters are not needed for them. In all sources, distinguish the ability to work from Armenia from the physical location of the vacancy.
 
-В этом плагине армянские источники пока не подключены. Общие адаптеры Greenhouse, Lever и Workable уже реализованы в `career-ops`. Пункты выше — план, а не список работающих провайдеров.
+None of the Armenian sources is connected in this plugin yet. The shared Greenhouse, Lever and Workable adapters are already implemented in `career-ops`. The items above are a plan, not a list of working providers.
+
+## Sources
+
+- [Greenhouse Job Board API](https://docs.greenhouse.io/job-board.html), [JetBrains board](https://job-boards.greenhouse.io/jetbrains)
+- [Lever Postings API](https://github.com/lever/postings-api), [Provectus](https://jobs.lever.co/provectus?location=Yerevan), [Ajax Systems](https://jobs.lever.co/ajax?location=Yerevan)
+- [workx.am MCP documentation](https://workx.am/api), [workx.am terms](https://workx.am/en/terms)
+- [Workable API help](https://help.workable.com/hc/en-us/articles/115012771647-Using-the-Workable-API-to-create-a-careers-page), [CloudLinux posting](https://apply.workable.com/cloudlinux-1/j/451EC658A2/apply/)
+- staff.am: [listing](https://staff.am/en/jobs/software-development), [how we work](https://staff.am/en/how-we-work), [sitemap](https://staff.am/assets/staff-am-sitemap.xml), [terms](https://staff.am/en/site/terms-of-use), [robots.txt](https://staff.am/robots.txt)
+- job.am: [listing](https://job.am/en/jobs?i=17), [pricing](https://job.am/en/static/pricing), [sitemap](https://job.am/sitemap/jobs.xml), [terms](https://job.am/terms), [robots.txt](https://job.am/robots.txt)
+- [ats.am](https://ats.am/images/ats-eng.pdf) (unrelated telephony site)
+
+## Conclusion
+
+Greenhouse and Lever boards with Yerevan vacancies are readable through official public APIs already supported by core providers; workx.am is the first candidate for a new adapter through its documented MCP. staff.am and job.am are technical candidates only, with unresolved conflicts with their published terms. Nothing is implemented in this plugin.

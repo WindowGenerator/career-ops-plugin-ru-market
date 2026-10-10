@@ -1,92 +1,113 @@
-# getmatch.ru: исследование источника вакансий
+# getmatch.ru: vacancy source research
 
-Дата проверки: 7 октября 2026 года. Источник: https://getmatch.ru/vacancies.
+Status: Reference
+Date: 2026-10-07
+Type: research
 
-## Решение
+## Question
 
-Не подключать регулярный сбор в плагин до получения разрешения getmatch или обнаружения официального интерфейса с подходящими условиями использования. Технический интерфейс найден, но открытый API для стороннего поиска вакансий и разрешение на копирование данных не подтверждены. Это исследование условий и технической доступности, а не юридическое заключение.
+Can the plugin collect vacancies from https://getmatch.ru/vacancies, technically and under the published terms of use? Checked on 7 October 2026. This is a study of terms and technical availability, not legal advice.
 
-getmatch описывает себя как сервис поиска работы и IT-рекрутмента с кандидатской и клиентской частями. Для плагина он интересен прежде всего как доска вакансий; наличие публичных вакансий не означает наличия открытого ATS API. См. [руководство](https://getmatch.ru/docs/users-manual).
+## Findings
 
-## API и фактические проверки
+### Service and API
 
-Поиск по публичным материалам getmatch не выявил документации стороннего API поиска вакансий, порядка получения ключа, лицензии на данные или опубликованных лимитов. [Архивная вакансия самого getmatch](https://getmatch.ru/vacancies/18595-senior-backend-engineer) упоминает развитие Public API для клиентов, но не содержит спецификации и не подтверждает доступность поиска для внешних агрегаторов.
+getmatch describes itself as a job search and IT recruitment service with candidate and client sides. For the plugin it is interesting mainly as a vacancy board; public vacancies do not imply an open ATS API (see the [users manual](https://getmatch.ru/docs/users-manual)).
 
-Публичная страница списка прочитана обычным HTTP GET без входа: статус 200, `content-type: text/html; charset=utf-8`, `x-powered-by: Next.js`. В сохранённом HTML примерно 222 тысячи символов, присутствуют фильтры и контейнер `b-vacancies-list__content-column` с загрузчиком `aria-label="Загрузка вакансий"`. Ссылок на отдельные `/vacancies/{id}-{slug}` не обнаружено. Извлечение вакансий только из исходного HTML списка в этой проверке не сработало; отсутствие карточек нельзя считать пустой выдачей.
+A search of public getmatch materials found no third-party vacancy search API documentation, no key issuance procedure, no data licence and no published rate limits. The [archived getmatch vacancy](https://getmatch.ru/vacancies/18595-senior-backend-engineer) mentions development of a Public API for clients, but contains no specification and does not confirm that search is available to external aggregators.
 
-Прочитаны только публичные JS-ресурсы, перечисленные самой страницей. В версии сайта на дату проверки:
+The public list page was read with a plain HTTP GET without login: status 200, `content-type: text/html; charset=utf-8`, `x-powered-by: Next.js`. The saved HTML is about 222 thousand characters and contains filters and the `b-vacancies-list__content-column` container with a loader `aria-label="Загрузка вакансий"`. No links to individual `/vacancies/{id}-{slug}` pages were found. Extracting vacancies from the initial list HTML alone did not work in this check; the absence of cards must not be read as an empty result.
 
-- `/_next/static/chunks/24r948zlcnodp.js` содержит `fetchVacancies` и `fetchVacancy`;
-- `/_next/static/chunks/1wwo05ckxi2q8.js` задаёт `API_BASE` как `${NEXT_PUBLIC_API_HOST || ''}/api` и обёртку `apiFetch`;
-- `/_next/static/chunks/2jk53mtji43cb.js` вызывает загрузку списка и читает `offers`, `meta.total`, `meta.offset`, `filters`, `profile_filters`, `current_filters`.
+Only public JS resources listed by the page itself were read. In the site version at the check date:
 
-Имена файлов сборки нестабильны; это ссылки на доказательства текущей проверки, а не точки интеграции.
+- `/_next/static/chunks/24r948zlcnodp.js` contains `fetchVacancies` and `fetchVacancy`;
+- `/_next/static/chunks/1wwo05ckxi2q8.js` defines `API_BASE` as `${NEXT_PUBLIC_API_HOST || ''}/api` and the `apiFetch` wrapper;
+- `/_next/static/chunks/2jk53mtji43cb.js` calls the list loader and reads `offers`, `meta.total`, `meta.offset`, `filters`, `profile_filters`, `current_filters`.
 
-| Операция | Путь, найденный в коде фронтенда | Что известно |
+Build file names are unstable; they are evidence references for this check, not integration points.
+
+| Operation | Path found in front-end code | What is known |
 | --- | --- | --- |
-| Список | `GET {API_BASE}/offers` | Клиент формирует параметры `p`, `offset`, `limit`, опциональные `sa`, `pa`, `s`, `from_date`, `to_date`, повторяемые `l`, `se`, `sp`, `pl`, а также `c`, `exclude_applied` |
-| Карточка | `GET {API_BASE}/offers/{id}` | Клиент может передавать `s`, `tg` |
-| Похожие вакансии | `GET {API_BASE}/offers/{id}/similar` | Найдено в том же публичном JS |
+| List | `GET {API_BASE}/offers` | The client builds `p`, `offset`, `limit`, optional `sa`, `pa`, `s`, `from_date`, `to_date`, repeatable `l`, `se`, `sp`, `pl`, and also `c`, `exclude_applied` |
+| Card | `GET {API_BASE}/offers/{id}` | The client may pass `s`, `tg` |
+| Similar vacancies | `GET {API_BASE}/offers/{id}/similar` | Found in the same public JS |
 
-По клиентскому коду `sp` соответствует специализации, `l` — локации, `sa` — зарплате, `se` — уровню, `pa` — периоду публикации. Свободный текстовый поиск через `q` не подтверждён. Не следует заимствовать предположительные параметры `q` или `format=remote` из чужих парсеров.
+By the client code, `sp` is specialization, `l` is locations, `sa` is salary, `se` is seniority and `pa` is publication period. Free-text search through `q` is not confirmed. Do not borrow the guessed parameters `q` or `format=remote` from third-party parsers.
 
-Обёртка клиента добавляет `X-Client-Platform: web` и использует `credentials: include`. Это поведение фронтенда, а не доказательство обязательной авторизации. При первоначальном исследовании запросы к API не выполнялись из-за ограничения `/api/` в robots.txt. По последующему прямому запросу пользователя выполнена ограниченная проверка анонимного доступа, описанная ниже. Реальные лимиты и значения фильтров остаются непроверенными.
+The client wrapper adds `X-Client-Platform: web` and uses `credentials: include`. This is front-end behaviour, not proof that authorization is required. In the initial research no API requests were made because of the `/api/` restriction in robots.txt. At the user's later direct request a limited anonymous-access check was made, described below. Real limits and filter values remain unverified.
 
-### Дополнительная проверка без авторизации
+### Additional check without authorization
 
-7 октября 2026 года выполнены три отдельных HTTP GET через curl. Не передавались `Authorization`, `Cookie`, API-ключ, `X-Client-Platform`, `Origin` или `Referer`; использован `Accept: application/json`. Cookie jar не использовался: cookies из ответов не переносились в следующие запросы.
+On 7 October 2026 three separate HTTP GET requests were made with curl. No `Authorization`, `Cookie`, API key, `X-Client-Platform`, `Origin` or `Referer` was sent; `Accept: application/json` was used. No cookie jar was used: cookies from responses were not carried to later requests.
 
-| Запрос | Результат |
+| Request | Result |
 | --- | --- |
-| `https://getmatch.ru/api/offers?p=1&offset=0&limit=1` | HTTP 200, JSON с `meta`, `offers`, `filters`, `current_filters`, `profile_filters`; `meta`: `total=921`, `offset=0`, `limit=1`; `profile_filters=null` |
-| `https://getmatch.ru/api/offers/36553` | HTTP 200, JSON карточки активного спецанонса `offer_type=one_day_offer_v3` |
-| `https://getmatch.ru/api/offers/35243` | HTTP 200, JSON обычной активной вакансии `offer_type=vacancy`: «Старший разработчик Java (Платформа стриминговой обработки)», Ozon; доступны описание и канонический путь |
+| `https://getmatch.ru/api/offers?p=1&offset=0&limit=1` | HTTP 200, JSON with `meta`, `offers`, `filters`, `current_filters`, `profile_filters`; `meta`: `total=921`, `offset=0`, `limit=1`; `profile_filters=null` |
+| `https://getmatch.ru/api/offers/36553` | HTTP 200, JSON card of an active special announcement `offer_type=one_day_offer_v3` |
+| `https://getmatch.ru/api/offers/35243` | HTTP 200, JSON of an ordinary active vacancy `offer_type=vacancy`: `Старший разработчик Java (Платформа стриминговой обработки)`, Ozon; description and canonical path available |
 
-**Технический вывод:** на момент проверки список и обе карточки доступны без авторизации и cookies. Для этих запросов не потребовался и заголовок `X-Client-Platform`. Playwright для получения проверенного JSON не требуется; документированность и разрешение на стороннее использование API по-прежнему не подтверждены.
+Technical conclusion: at the time of the check the list and both cards were available without authorization or cookies. The `X-Client-Platform` header was not needed for these requests either. Playwright is not needed to obtain the verified JSON; documentation and permission for third-party use of the API are still not confirmed.
 
-Особенность выдачи: при `limit=1` массив `offers` содержал четыре элемента — три спецанонса и одну обычную вакансию. Поэтому нельзя считать `offers.length` равным размеру страницы или использовать длину массива для вычисления следующего offset без дополнительной проверки пагинации. Число 921 — значение `meta.total`, а не независимо подтверждённое количество обычных активных вакансий. Доступность всех карточек и фильтров не проверялась.
+Response quirk: with `limit=1` the `offers` array contained four items, three special announcements and one ordinary vacancy. `offers.length` therefore cannot be treated as the page size, and the array length cannot be used to compute the next offset without further pagination checks. The number 921 is the value of `meta.total`, not an independently confirmed count of ordinary active vacancies. Availability of all cards and filters was not checked.
 
-Правовой вывод не изменился: эти ответы подтверждают технический доступ, но не отменяют robots.txt и пункт 3.2 соглашения. Регулярный сбор не запускался.
+The legal conclusion did not change: these responses confirm technical access but do not override robots.txt and clause 3.2 of the agreement. Regular collection was not started.
 
-## Попытка Playwright и HTML
+### Playwright attempt and HTML
 
-Выполнена попытка подключить браузер через доступный browser runtime для работы с Playwright. Получен ответ `No browser is available`; после проверки инструкции восстановления список браузеров оказался пустым. В проекте также не установлены `playwright`, `@playwright/test` и `puppeteer`. Поэтому браузерное выполнение, наблюдение сетевых запросов, пагинация и парсинг отрисованных карточек в этой сессии не проверены. Успешного Playwright-прототипа нет.
+An attempt was made to attach a browser through the available browser runtime for Playwright. The answer was `No browser is available`; after following the recovery instructions the browser list was still empty. `playwright`, `@playwright/test` and `puppeteer` are also not installed in the project. Browser execution, network request observation, pagination and parsing of rendered cards were therefore not verified in this session. There is no successful Playwright prototype.
 
-Сеть обычного sandbox сначала не разрешала DNS для getmatch.ru. Разрешённые read-only HTTP-запросы вне sandbox позволили проверить страницу, robots.txt и её публичные скрипты. Эти результаты не заменяют браузерную проверку.
+The ordinary sandbox network first did not resolve DNS for getmatch.ru. Permitted read-only HTTP requests outside the sandbox made it possible to check the page, robots.txt and its public scripts. These results do not replace a browser check.
 
-Публичная [архивная карточка](https://getmatch.ru/vacancies/18595-senior-backend-engineer) доступна через веб-инструмент и содержит название, компанию, зарплату, локации, форматы работы, специализацию, уровень, опыт и описание. На ней явно указано, что вакансия в архиве. Это подтверждает доступность отдельных карточек, но не актуальной выдачи. При будущем прототипировании обязательно исключать архивные вакансии; удалённая работа с указанием России не равнозначна удалённой работе из любой страны.
+The public [archived card](https://getmatch.ru/vacancies/18595-senior-backend-engineer) is reachable through a web tool and contains title, company, salary, locations, work formats, specialization, seniority, experience and description. It states explicitly that the vacancy is archived. This confirms that individual cards are reachable, but not the current listing. Any future prototype must exclude archived vacancies; remote work with Russia specified is not equivalent to remote work from any country.
 
-## Условия использования и правовая оценка
+### Terms of use and legal assessment
 
-Проверено [действующее пользовательское соглашение](https://getmatch.ru/docs/terms-of-service), опубликованное как редакция от 13 октября 2022 года, а не исторические редакции по отдельным ссылкам.
+The [current user agreement](https://getmatch.ru/docs/terms-of-service) was checked, published as the edition of 13 October 2022, not historical editions available by separate links.
 
-- Пункт 2.1 разрешает просмотр открытых материалов без регистрации. Пункт 1.3 считает получение доступа к материалам присоединением к соглашению. Юридическая применимость такого присоединения в конкретном случае требует отдельной оценки.
-- Пункт 3.1 относит тексты, базы данных и другие материалы к объектам исключительных прав getmatch, пользователей и иных правообладателей.
-- Пункт 3.2 ограничивает воспроизведение, повторение, копирование, продажу и коммерческое использование частей сервиса, включая контент, без разрешения getmatch или основания в дополнительных документах. Формулировка даёт основание видеть ограничение копирования, а не только коммерческого использования. Отдельного прямого запрета со словом «парсинг» в прочитанном соглашении не обнаружено; это не отменяет ограничение копирования.
+- Clause 2.1 permits viewing open materials without registration. Clause 1.3 treats gaining access to the materials as accession to the agreement. The legal applicability of such accession in a specific case needs separate assessment.
+- Clause 3.1 classifies texts, databases and other materials as objects of exclusive rights of getmatch, users and other right holders.
+- Clause 3.2 restricts reproduction, repetition, copying, sale and commercial use of parts of the service, including content, without getmatch's permission or a basis in additional documents. The wording gives grounds to see a restriction on copying, not only on commercial use. No separate direct prohibition using the word "parsing" was found in the agreement as read; this does not cancel the copying restriction.
 
-Получен [robots.txt](https://getmatch.ru/robots.txt): для `User-agent: *` закрыт `/api/`, а также пути авторизации, профилей, работодателей и ряд служебных путей. `/vacancies` не закрыт, указан `Sitemap: https://getmatch.ru/sitemap.xml`. Sitemap в этой проверке не читался. Robots.txt — техническая инструкция для роботов, а не лицензия на контент: разрешение обхода публичной страницы не отменяет соглашение и права на базу.
+[robots.txt](https://getmatch.ru/robots.txt) was fetched: for `User-agent: *` it closes `/api/`, authorization paths, profiles, employers and a number of service paths. `/vacancies` is not closed, and `Sitemap: https://getmatch.ru/sitemap.xml` is listed. The sitemap was not read in this check. robots.txt is a technical instruction for robots, not a content licence: permission to crawl a public page does not override the agreement and database rights.
 
-[Статья 1335.1 ГК РФ](https://www.consultant.ru/document/cons_doc_LAW_64629/6a3a364978a1d1c94fdbf7cbf6d14b5c4bb528a1/) предусматривает исключения для правомерного использования базы, включая личные цели в оправданном объёме и несущественную часть для иных целей. Она также ограничивает неоднократное извлечение небольших частей, если оно противоречит нормальному использованию базы и необоснованно ущемляет интересы изготовителя. Исключения не дают автоматического разрешения на регулярный сбор или перепубликацию полных описаний и не снимают вопрос авторских прав. Одна ссылка на оригинал сама по себе не делает копирование разрешённым.
+[Article 1335.1 of the Civil Code of the Russian Federation](https://www.consultant.ru/document/cons_doc_LAW_64629/6a3a364978a1d1c94fdbf7cbf6d14b5c4bb528a1/) provides exceptions for lawful use of a database, including personal purposes to a justified extent and an insignificant part for other purposes. It also restricts repeated extraction of small parts if that conflicts with normal use of the database and unreasonably harms the maker's interests. The exceptions give no automatic permission for regular collection or republication of full descriptions and do not remove the copyright question. A link to the original does not by itself make copying permitted.
 
-Вывод: открытый просмотр подтверждён; правомерность регулярного извлечения и хранения для распространяемого плагина не установлена, есть существенный конфликт с условиями копирования. Нельзя объявить любой личный просмотр незаконным или считать любой парсинг разрешённым. По условию задачи «добавлять, если всё легально» источник пока не готов к реализации.
+Summary: open viewing is confirmed; the lawfulness of regular extraction and storage for a distributed plugin is not established, and there is a substantial conflict with the copying terms. It cannot be claimed that any personal viewing is unlawful or that any parsing is permitted. Under the task condition "add if everything is legal", the source was not ready for implementation at the time.
 
-## Что выяснить у getmatch
+### What to clarify with getmatch
 
-Официальная [поддержка](https://getmatch.ru/docs/support): `hello@getmatch.ru`, Telegram `@gbot_team`. Сообщения от имени пользователя не отправлялись.
+Official [support](https://getmatch.ru/docs/support): `hello@getmatch.ru`, Telegram `@gbot_team`. No messages were sent on the user's behalf.
 
-Запросить документированный API/партнёрский feed либо разрешение на автоматическое чтение публичных вакансий для career-ops. Уточнить допустимые поля, локальное хранение, сроки хранения и обновления, использование описаний для персонального поиска, распространение адаптера, атрибуцию, лимиты, анонимный доступ и условия коммерческого использования. Разрешение на API-вызовы и право хранить/использовать контент следует проверить отдельно. Если будет предоставлен другой официальный endpoint, получить его документацию и условия.
+Request a documented API or partner feed, or permission for automatic reading of public vacancies for career-ops. Clarify permitted fields, local storage, retention and refresh periods, use of descriptions for personal search, distribution of the adapter, attribution, limits, anonymous access and commercial-use terms. Permission for API calls and the right to store and use content must be checked separately. If a different official endpoint is provided, obtain its documentation and terms.
 
-## Условный план после разрешения
+### Conditional plan after permission
 
-Это предварительная оценка изменений по текущему коду плагина, а не одобренный план запуска источника. Первый обязательный шаг — устранить неопределённость условий.
+This is a preliminary estimate of changes against the plugin code at the time, not an approved launch plan. The first mandatory step is to remove the uncertainty about the terms.
 
-1. **Подтвердить разрешённый способ доступа.** Предпочесть документированный API/feed. Если разрешён только браузерный сбор, проверить отрисовку одной страницы и одной актуальной карточки через Playwright, фильтры, пагинацию и признак архива. Не закреплять внутренние endpoints и параметры как официальный контракт.
-2. **Согласовать данные и нормализацию.** Использовать только разрешённые поля: название, компания, каноническая ссылка, локация/формат, зарплата и подтверждённая дата публикации. Описания — только в разрешённом объёме. Сохранять региональные ограничения remote; не подменять отсутствующую дату текущей и не считать архивную карточку активной.
-3. **Добавить адаптер `lib/getmatch.mjs`.** Определить проверяемый контракт ответа, пагинацию, дедупликацию, ошибки доступа, лимитов и изменения схемы. Для разрешённого HTML использовать имеющиеся инструменты `lib/html.mjs`; Playwright не вводить в runtime без проверки возможностей хоста. Текущий контракт предоставляет `ctx.fetchJson`/`ctx.fetchText`, а браузерный контекст существующими адаптерами не используется. Отдельный браузер не должен обходить сетевые ограничения движка плагинов.
-4. **Обновить регистрацию и конфигурацию.** Добавить `getmatch` в `index.mjs` и `lib/config.mjs`, по умолчанию выключить. Сохранить старые конфигурации и порядок дедупликации. Сейчас `primary_source_order` допускает ровно три исходных либо все пять источников; после добавления шестого сохранить поддержку существующих списков из пяти. Пример конфигурации писать только с проверенными фильтрами.
-5. **Обновить защиту HTTP и очереди.** Внести только разрешённые host/path в `manifest.json` и `lib/http.mjs`, добавить очередь в `lib/queue.mjs`, соблюдать согласованные лимиты и ограничивать число страниц. Текущие 750 мс между запросами — внутренняя настройка плагина, не лимит getmatch. При `403`, CAPTCHA или необходимости входа прекращать сбор и выдавать явный статус.
-6. **Расширить URL-нормализацию.** В `lib/normalize.mjs` добавить проверку канонических ссылок getmatch и протестировать идентичность URL по ID при изменении slug. Не принимать произвольные внешние ссылки и не извлекать профили кандидатов.
-7. **Проверить поведение.** Fixtures разрешённой выдачи: активные/архивные вакансии, пустой результат против загрузчика и сломанной схемы, региональный remote, зарплата, пагинация, повторяющиеся ID; отдельно проверить отключённый источник, обратную совместимость конфигураций, частичный сбой при `source: all` и ограничения host/path. Затем `npm test`, интеграционная проверка с career-ops и один ограниченный живой запрос разрешённого интерфейса.
-8. **Документация и выпуск.** Обновить README, примеры `portals.yml`, `skill.md`, описание manifest и health-проверку с учётом отключённого по умолчанию источника. Опубликовать основание использования, ограничения данных и дату проверки. Выпускать после успешной живой проверки и подтверждения условий; до этого источник не заявлять работающим.
+1. **Confirm the permitted access method.** Prefer a documented API/feed. If only browser collection is permitted, check rendering of one page and one current card via Playwright, plus filters, pagination and the archive marker. Do not pin internal endpoints and parameters as an official contract.
+2. **Agree on data and normalization.** Use only permitted fields: title, company, canonical link, location/format, salary and a confirmed publication date. Descriptions only to the permitted extent. Keep regional remote restrictions; do not substitute a missing date with the current one and do not treat an archived card as active.
+3. **Add the `lib/getmatch.mjs` adapter.** Define a checkable response contract, pagination, deduplication, access errors, limits and schema changes. For permitted HTML use the existing `lib/html.mjs` tools; do not introduce Playwright into the runtime without checking host capabilities. The current contract offers `ctx.fetchJson`/`ctx.fetchText`, and existing adapters do not use a browser context. A separate browser must not bypass the plugin engine's network restrictions.
+4. **Update registration and configuration.** Add `getmatch` to `index.mjs` and `lib/config.mjs`, disabled by default. Keep old configurations and the deduplication order. At the time `primary_source_order` allowed exactly three initial sources or all five; after adding the sixth, keep supporting existing lists of five. Write the example configuration only with verified filters.
+5. **Update HTTP guarding and queues.** Put only permitted host/path into `manifest.json` and `lib/http.mjs`, add a queue in `lib/queue.mjs`, respect agreed limits and bound the page count. The current 750 ms between requests is an internal plugin setting, not a getmatch limit. On `403`, CAPTCHA or a required login, stop collection and emit an explicit status.
+6. **Extend URL normalization.** In `lib/normalize.mjs` add a check of canonical getmatch links and test URL identity by ID when the slug changes. Do not accept arbitrary external links and do not extract candidate profiles.
+7. **Verify behaviour.** Fixtures of permitted output: active/archived vacancies, empty result versus loader and broken schema, regional remote, salary, pagination, repeated IDs; separately check the disabled source, backward compatibility of configurations, partial failure under `source: all` and host/path restrictions. Then `npm test`, an integration check with career-ops and one bounded live request to the permitted interface.
+8. **Documentation and release.** Update README, `portals.yml` examples, `skill.md`, the manifest description and the health check, taking into account the source being disabled by default. Publish the basis of use, data limits and the check date. Release after a successful live check and confirmation of the terms; until then do not claim the source works.
 
-В рамках исследования рабочий код, зависимости, manifest и настройки источников не изменялись.
+No working code, dependencies, manifest or source settings were changed during the research.
+
+## Sources
+
+- Listing page: https://getmatch.ru/vacancies
+- [Users manual](https://getmatch.ru/docs/users-manual)
+- [Archived getmatch vacancy](https://getmatch.ru/vacancies/18595-senior-backend-engineer)
+- [User agreement](https://getmatch.ru/docs/terms-of-service)
+- [robots.txt](https://getmatch.ru/robots.txt)
+- [Support](https://getmatch.ru/docs/support)
+- [Article 1335.1 of the Civil Code of the Russian Federation](https://www.consultant.ru/document/cons_doc_LAW_64629/6a3a364978a1d1c94fdbf7cbf6d14b5c4bb528a1/)
+- Public front-end JS chunks of getmatch.ru (names unstable, listed above)
+
+## Conclusion
+
+Do not connect regular collection to the plugin until getmatch gives permission or an official interface with suitable terms of use is found. A technical interface was found, but an open API for third-party vacancy search and permission to copy data are not confirmed.
+
+The adapter was later implemented as an experimental, opt-in source; see [getmatch provider plan](../roadmap/getmatch-provider.md) and [getmatch provider page](../providers/getmatch.md).

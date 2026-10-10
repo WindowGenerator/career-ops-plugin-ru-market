@@ -1,191 +1,182 @@
-# Ревизия адаптеров ru-market и план перехода на 0.7.0
+# Review of ru-market adapters and the 0.7.0 transition plan
 
-Статус: ревизия выполнена по состоянию репозитория 0.6.0 и локального checkout core (`92f4e4d2`). Решения a–k согласованы с владельцем. Реализация выполнена в ветке `feature/provider-architecture-review` (0.7.0, не закоммичена); отклонения от документа перечислены в разделе «Итоги реализации» в конце. Ссылки вида `файл:строка` относятся к этим версиям. Живые запросы к источникам при подготовке документа не выполнялись.
+Status: Implemented
+Date: 2026-10-10
+Type: roadmap
 
-## Задача
+The review was done against the state of the 0.6.0 repository and the local core checkout (`92f4e4d2`). Decisions a-k were agreed with the owner. The implementation was done on the branch `feature/provider-architecture-review` (0.7.0); deviations from this document are listed in the section "Implementation results" at the end. References of the form `file:line` refer to those versions. No live requests to the sources were made while preparing the document.
 
-Сравнить семь адаптеров плагина (hh, habr-career, geekjob, superjob, trudvsem, getmatch, helloworld-rs) с соглашениями upstream career-ops, зафиксировать расхождения, дать технический вердикт по кандидатам (Армения, Яндекс) и описать согласованные изменения: удаление API-адаптера HH, гибридные фильтры, новые поля Job, фильтры getmatch и защиту от prompt injection.
+## Problem
 
-Соглашения upstream, с которыми сравнивалось:
+Compare the seven plugin adapters (hh, habr-career, geekjob, superjob, trudvsem, getmatch, helloworld-rs) with the upstream career-ops conventions, record the discrepancies, give a technical verdict on the candidates (Armenia, Yandex) and describe the agreed changes: removal of the HH API adapter, hybrid filters, new Job fields, getmatch filters and prompt-injection protection.
 
-- Контракт провайдера: `id`, `fetch(entry, ctx)` возвращает массив; опционально `detect`, `dedupKey` (`../career-ops/providers/_types.js:5-7`, `Provider` в конце файла). Плагин возвращает массив с невидимыми `sourceStatuses` и `queryStatuses` (`index.mjs:47-48`); core читает их в `scan.mjs:3601`.
-- Job: обязательны `title` и `url`, остальное необязательно (`_types.js`, `Job`). `makeJob` возвращает `null` без заголовка или допустимого URL (`lib/normalize.mjs:86`).
-- local-parser: запуск внешней команды из репозитория, JSON на stdout, лимит 20 с и 2 МБ по умолчанию (`providers/local-parser.mjs:13-14`), передаются только перечисленные поля (`local-parser.mjs:196-223`).
-- Фильтры core (`title_filter`, `skip_tiers`, `salary_filter`, `content_filter`, возраст публикации) применяются только после `provider.fetch` в `scan.mjs` (вызов `scan.mjs:3585`, фильтры `3643-3669`). Серверных фильтров в core-провайдерах нет.
-- Plugin-провайдер получает только `ctx` с `fetchText`, `fetchJson`, `fetchResponse` (`_types.js`, `Context`), то есть запустить Playwright из плагина нельзя; браузерный сбор вынесен в companion (`install.sh:17`, `companion/README.md:5`).
+Upstream conventions compared against:
 
-Поправка к исходной формулировке: «CI запрещает browser/process-модули в bundled-плагинах» подтверждено только частично. Найден пункт чек-листа статического аудита в шаблоне PR реестра core (`../career-ops/.github/PULL_REQUEST_TEMPLATE/plugin-registry.md:38`: без `child_process`, `playwright`, raw sockets, глобального `fetch`, `eval`). В `plugin-registry-validate.yml` таких проверок не найдено. Ограничение реально действует как правило ревью и как набор доступных плагину средств (`ctx`).
+- Provider contract: `id`, `fetch(entry, ctx)` returns an array; optionally `detect`, `dedupKey` (`../career-ops/providers/_types.js:5-7`, `Provider` at the end of the file). The plugin returns an array with non-enumerable `sourceStatuses` and `queryStatuses` (`index.mjs:47-48`); core reads them in `scan.mjs:3601`.
+- Job: `title` and `url` are mandatory, the rest optional (`_types.js`, `Job`). `makeJob` returns `null` without a title or a valid URL (`lib/normalize.mjs:86`).
+- local-parser: runs an external command from the repository, JSON on stdout, a limit of 20 s and 2 MB by default (`providers/local-parser.mjs:13-14`), only the listed fields are passed (`local-parser.mjs:196-223`).
+- Core filters (`title_filter`, `skip_tiers`, `salary_filter`, `content_filter`, posting age) are applied only after `provider.fetch` in `scan.mjs` (call at `scan.mjs:3585`, filters at `3643-3669`). Core providers have no server-side filters.
+- A plugin provider receives only a `ctx` with `fetchText`, `fetchJson`, `fetchResponse` (`_types.js`, `Context`), so Playwright cannot be launched from a plugin; browser collection is moved to the companion (`install.sh:17`, `companion/README.md:5`).
 
-## Сравнение адаптеров
+Correction to the original wording: "CI forbids browser/process modules in bundled plugins" is confirmed only partially. A static-audit checklist item was found in the core registry PR template (`../career-ops/.github/PULL_REQUEST_TEMPLATE/plugin-registry.md:38`: no `child_process`, `playwright`, raw sockets, global `fetch`, `eval`). No such checks were found in `plugin-registry-validate.yml`. The restriction really works as a review rule and as the set of tools available to a plugin (`ctx`).
 
-| Адаптер | Транспорт | Авторизация | Очередь запросов | Серверные параметры, которые передаёт плагин | Поля результата | Тесты |
-| --- | --- | --- | --- | --- | --- | --- |
-| hh | JSON API `api.hh.ru/vacancies` | необязательный Bearer `HH_ACCESS_TOKEN` (`lib/http.mjs:25-31`) | 2 параллельно, без паузы (`lib/queue.mjs:35`) | `text`, `area`, `schedule`, `period`, плюс `page`, `per_page`, `host`, `locale`, `order_by` (`lib/hh.mjs:38-40`) | описание из snippet, `postedAt`, `salary`, `compensation`, `workArrangement`, `locations` | `test/run.mjs`, `fixtures/hh` |
-| habr-career | HTML | нет | 1 запрос, пауза 750 мс (`queue.mjs:36`, умолчание `queue.mjs:3`) | путь категории, `/remote`, `page` (`lib/habr-career.mjs:44-45`); текстового поиска нет | описание карточки, зарплата, дата | `test/run.mjs`, `fixtures/habr-career` |
-| geekjob | HTML | нет | как выше (`queue.mjs:37`) | только страница (`lib/geekjob.mjs:42`) | описание карточки, зарплата, дата только при явной метке публикации (`geekjob.mjs:25-27`) | `test/run.mjs`, `fixtures/geekjob` |
-| superjob | JSON API | обязателен `SUPERJOB_API_KEY` (`http.mjs:33-36`) | как выше (`queue.mjs:38`) | `keyword`, `page`, `count` (`lib/superjob.mjs:39-41`) | описание из `work`, `candidat`, `compensation` | заготовки в `test/run.mjs:269`; каталога fixtures нет |
-| trudvsem | JSON API | нет | как выше (`queue.mjs:39`) | `text`, `limit`, `offset` (`lib/trudvsem.mjs:47-49`) | описание из `duty`, `requirements`, `qualification` | заготовки в `test/run.mjs:273`; каталога fixtures нет |
-| getmatch | недокументированный JSON `/api/offers` | нет | 1 запрос, пауза 1000 мс (`queue.mjs:41`) | только `p`, `offset`, `limit` (`lib/getmatch.mjs:62`) | заголовок, компания, локации, зарплата; описание намеренно не копируется (`getmatch.mjs:48`) | `test/getmatch.mjs` (11), `fixtures/getmatch` |
-| helloworld-rs | HTML | нет | 1 запрос, пауза 1000 мс (`queue.mjs:40`) | `q` (`lib/helloworld.mjs:98`) | `seniority`, `skills`, `compensation` (`helloworld.mjs:78-85`); описания нет | `test/helloworld.mjs` (9), `fixtures/helloworld-rs` |
+### Adapter comparison
 
-Общее: тайм-аут запроса 10 с, до двух повторов для `network`, `server`, `rate-limited` (`http.mjs:38-40`, `lib/retry.mjs:13-20`). Допустимые URL проверяются `assertRequestUrl` (`http.mjs:7-20`) и `jobUrl` (`normalize.mjs:37-52`). Идентичность вакансии: `sourceId` из URL (`normalize.mjs:97`).
+The adapter comparison table (transport, authorization, request queue, server-side parameters, result fields, tests) was moved to the provider matrix: [../providers/README.md](../providers/README.md), which describes the current (0.7.0) state; the removed HH API is kept there as a historical row of the filter matrix. Facts specific to the 0.6.0 state that the review relied on:
 
-Расхождения со схемой upstream, не относящиеся к списку находок: поля `skills`, `seniority`, `note` не описаны в `_types.js`; `job.salary` плагина имеет форму `{from, to}` (`normalize.mjs:59`), а `salary_filter` core читает `min`/`max` (`scan.mjs:1006`). Пока присутствует `compensation`, core использует его (`scan.mjs:1001`), поэтому на практике вред ограничен; новые адаптеры должны полагаться на `compensation`.
+- At 0.6.0 the hh adapter used the JSON API `api.hh.ru/vacancies` with an optional Bearer `HH_ACCESS_TOKEN` (`lib/http.mjs:25-31`), 2 parallel requests without pause (`lib/queue.mjs:35`), and sent `text`, `area`, `schedule`, `period` plus `page`, `per_page`, `host`, `locale`, `order_by` (`lib/hh.mjs:38-40`).
+- SuperJob and Trudvsem were covered only by stubs in `test/run.mjs` (lines 269 and 273) without a fixtures directory.
+- getmatch had 11 tests and helloworld-rs 9 tests at 0.6.0.
 
-## Кандидаты: технический вердикт
+Common: request timeout 10 s, up to two retries for `network`, `server`, `rate-limited` (`http.mjs:38-40`, `lib/retry.mjs:13-20`). Allowed URLs are checked by `assertRequestUrl` (`http.mjs:7-20`) and `jobUrl` (`normalize.mjs:37-52`). Vacancy identity: `sourceId` from the URL (`normalize.mjs:97`).
 
-Вопрос один: отображается ли ответ источника на единую схему Job. Правовая сторона в вердикт не входит. Справка: условия Яндекса ограничивают использование контента функциями самого сайта (`docs/research/yandex-jobs.md:37`, п. 2.3 соглашения).
+Discrepancies with the upstream schema that are not on the findings list: the fields `skills`, `seniority`, `note` are not described in `_types.js`; the plugin's `job.salary` has the shape `{from, to}` (`normalize.mjs:59`), while core's `salary_filter` reads `min`/`max` (`scan.mjs:1006`). While `compensation` is present core uses it (`scan.mjs:1001`), so in practice the harm is limited; new adapters should rely on `compensation`.
 
-| Кандидат | Что подтверждено материалами репозитория | Вердикт |
+### Candidates: technical verdict
+
+There is one question: does the source response map to the unified Job schema. The legal side is not part of the verdict. For reference: the Yandex terms restrict the use of content to the functions of the site itself ([Yandex Jobs research](../research/yandex-jobs.md), "Terms of use", clause 2.3 of the agreement).
+
+| Candidate | What the repository materials confirm | Verdict |
 | --- | --- | --- |
-| Greenhouse, Lever, Workable (Армения) | Уже есть провайдеры core: `providers/greenhouse.mjs`, `lever.mjs`, `workable.mjs` (`docs/research/armenia-ats.md:5`). Они возвращают Job по штатной схеме | Отображаются; адаптер в плагине не нужен, нужны только проверенные доски |
-| workx.am | Публичный MCP с `search-jobs` и `get-job-details` (`docs/research/armenia-ats.md:11`); схема ответа в репозитории не зафиксирована, пример ответа не сохранён (`docs/research/armenia-ats.md:30` требует её проверить) | Не определён. Дополнительно транспорт не покрыт: `request()` плагина делает только GET (`http.mjs:24-40`), для MCP нужен POST (`FetchOptions` допускает `method` и `body`, `_types.js`, но плагин их не передаёт) |
-| staff.am, job.am | Публичные HTML и sitemap; поля карточек и стабильность URL не проверены (`docs/research/armenia-ats.md:13-14,31-32`) | Не определён. По аналогии с HTML-адаптерами `title`, `url`, `company`, `location` вероятно извлекаемы, но без образцов разметки это предположение |
-| Яндекс Jobs | API не найден; DOM и XHR не исследованы, браузера не было (`docs/research/yandex-jobs.md:15,31`). Наблюдались названия, команды, краткие описания, города, форматы работы, навыки (`:25`) | Частично. Возможное соответствие: `title`, `url`, `location`, `workArrangement`, `skills`, уровень через `pro_levels` (`:26`, значения не проверены). Компания всегда одна (`:9`). Зарплата и дата публикации не подтверждены (`:29`), пагинация «Показать ещё» не установлена (`:28`). Полный контракт ответа не определён |
+| Greenhouse, Lever, Workable (Armenia) | Core providers already exist: `providers/greenhouse.mjs`, `lever.mjs`, `workable.mjs` ([Armenia ATS research](../research/armenia-ats.md), "Findings"). They return Job in the standard schema | Map; no adapter is needed in the plugin, only verified boards |
+| workx.am | Public MCP with `search-jobs` and `get-job-details` ([Armenia ATS research](../research/armenia-ats.md)); the response schema is not recorded in the repository, no sample response is saved (the research plan requires checking it) | Not determined. In addition the transport is not covered: the plugin's `request()` makes only GET (`http.mjs:24-40`), MCP needs POST (`FetchOptions` allows `method` and `body`, `_types.js`, but the plugin does not pass them) |
+| staff.am, job.am | Public HTML and sitemap; card fields and URL stability are not checked ([Armenia ATS research](../research/armenia-ats.md)) | Not determined. By analogy with the HTML adapters `title`, `url`, `company`, `location` are probably extractable, but without markup samples this is an assumption |
+| Yandex Jobs | No API found; DOM and XHR not studied, there was no browser ([Yandex Jobs research](../research/yandex-jobs.md)). Titles, teams, short descriptions, cities, work formats, skills were observed | Partial. Possible mapping: `title`, `url`, `location`, `workArrangement`, `skills`, seniority through `pro_levels` (values not checked). The company is always the same. Salary and publication date are not confirmed, `Показать ещё` ("Show more") pagination is not established. The full response contract is not defined |
 
-## Матрица фильтров
+### Filter matrix
 
-Колонка «Источник предлагает» для hh заполнена по списку, переданному в задаче; в репозитории полный перечень параметров HH API не зафиксирован, поэтому для остальных источников колонка помечена как непроверенная.
+The filter matrix (what the source offers, what the plugin sends, what core filters after fetch) was moved to [../providers/README.md](../providers/README.md#filter-matrix). Key points the decisions below rely on: at 0.6.0 the hh adapter sent only `text`, `area`, `schedule`, `period`; the browser companion sent `text`, `page`, `area` and `search_field=name` via `titleOnly` (`companion/scan-hh.mjs.txt:120-122`); getmatch sent nothing beyond `p`, `offset`, `limit`; core filtering applies after the fetch to title, description, salary and age.
 
-| Источник | Источник предлагает | Плагин передаёт | Core фильтрует после выборки |
-| --- | --- | --- | --- |
-| hh (API, до 0.7.0) | `experience`, `employment`, `salary`, `only_with_salary`, `professional_role`, `search_field`, `excluded_text` и др. | только `text`, `area`, `schedule`, `period` (`hh.mjs:38-40`) | название, описание, зарплата, возраст |
-| hh (браузер, companion) | параметры поиска на странице hh.ru | `text`, `page`, `area`, `search_field=name` через `titleOnly` (`companion/scan-hh.mjs.txt:120-122`) | то же |
-| habr-career | не проверялось | категория, `remote` | то же |
-| geekjob | не проверялось | страница | то же |
-| superjob | не проверялось | `keyword` | то же |
-| trudvsem | не проверялось | `text` | то же |
-| getmatch | параметры `sa`, `pa`, `se`, `l`, `s`, `from_date`, `to_date`, `sp`, `pl`, `c`, `exclude_applied` выведены из клиентского кода (`docs/research/getmatch.md:27,31`). НЕПРОВЕРЕНЫ: значения и поведение не наблюдались (`docs/research/getmatch.md:33`) | ничего (`docs/providers/getmatch.md:22-24`) | то же, только на загруженных страницах |
-| helloworld-rs | не проверялось | `q` | то же; `seniority` и `skills` отдаются, но не фильтруются (`docs/roadmap/core-job-filters.md`) |
+### Findings
 
-## Находки
+Critical for the user:
 
-Критично для пользователя:
+- **hh is enabled by default although the API answers 403.** `DEFAULT_SOURCES` contains `hh` (`lib/config.mjs:3`), `enabled` is true by default for it (`config.mjs:46`); unavailability is acknowledged in `README.md:5`. Every `source: all` makes a useless request and yields `failed` for hh. Closed by decision a.
+- **Prompt protection is declared but not implemented.** `skill.md:4-5` calls vacancy text untrusted, while the code only strips tags and `script`/`style`, decodes entities and collapses whitespace (`normalize.mjs:3,11`); there are no length limits or detection. `title`, `company`, `location`, `description`, `note` pass through `makeJob` (`normalize.mjs:84-110`). Closed by decision e. Nuance: the regular expression `<[^>]*>` does not remove an HTML comment that contains `>` inside.
 
-- **hh включён по умолчанию, хотя API отвечает 403.** `DEFAULT_SOURCES` содержит `hh` (`lib/config.mjs:3`), `enabled` по умолчанию истинно для него (`config.mjs:46`); недоступность признана в `README.md:5`. Каждый `source: all` делает бесполезный запрос и даёт `failed` по hh. Закрывается решением a.
-- **Промпт-защита заявлена, но не реализована.** `skill.md:4-5` называет текст вакансий недоверенным, а код только убирает теги и `script`/`style`, декодирует сущности и схлопывает пробелы (`normalize.mjs:3,11`); лимитов длины и детекции нет. Через `makeJob` проходят `title`, `company`, `location`, `description`, `note` (`normalize.mjs:84-110`). Закрывается решением e. Нюанс: регулярное выражение `<[^>]*>` не удаляет HTML-комментарий, внутри которого есть `>`.
+Warnings:
 
-Предупреждения:
+- **getmatch without filters.** Only `p`, `offset`, `limit` (`getmatch.mjs:62`); `enabled`, `mode`, `max_pages`, `per_page` are accepted (`config.mjs:53`). Closed by decision d.
+- **CI is pinned to different cores.** `test.yml:28-29`: `career-ops-hq/career-ops` @ `8c9aae34`; `health.yml:18-19`: `santifer/career-ops` @ `92dea48b`; `release.yml:9` uses `test.yml`. The local core checkout during the review is `92f4e4d2`, a third variant. Whether these commits exist in the named repositories cannot be checked from the local environment. They need to be brought to one repository and reference, or the difference explained explicitly.
+- **`requiredEnv` is empty but SuperJob fails without a key.** `manifest.json:8`; a `config` error at request time (`http.mjs:35`). Nuance: SuperJob is disabled by default (`config.mjs:46`), the key is listed in `optionalEnv` (`manifest.json:9`), so this is not a manifest defect but late detection: the error shows up at request time and lands in `sourceStatuses` as `failed/config`. Proposal: check the key in `parseConfig` when `enabled: true` or document it in `skill.md`.
 
-- **getmatch без фильтров.** Только `p`, `offset`, `limit` (`getmatch.mjs:62`); принимаются `enabled`, `mode`, `max_pages`, `per_page` (`config.mjs:53`). Закрывается решением d.
-- **CI закреплён на разных core.** `test.yml:28-29`: `career-ops-hq/career-ops` @ `8c9aae34`; `health.yml:18-19`: `santifer/career-ops` @ `92dea48b`; `release.yml:9` использует `test.yml`. Локальный checkout core при ревизии — `92f4e4d2`, третий вариант. Проверить, существуют ли эти коммиты в указанных репозиториях, из локального окружения нельзя. Нужно привести к одному репозиторию и ссылке или явно объяснить различие.
-- **`requiredEnv` пуст, а SuperJob падает без ключа.** `manifest.json:8`; ошибка `config` на запросе (`http.mjs:35`). Нюанс: SuperJob выключен по умолчанию (`config.mjs:46`), ключ значится в `optionalEnv` (`manifest.json:9`), поэтому это не дефект манифеста, а позднее обнаружение: ошибка проявляется при запросе и попадает в `sourceStatuses` как `failed/config`. Предложение: проверять ключ в `parseConfig` при `enabled: true` или документировать в `skill.md`.
+Found during the review:
 
-Найдено при ревизии:
+- **The companion cannot import plugin modules.** The installer copies one file `scan-hh.mjs` into `scripts/ru-market/` (`install.sh`, installation block; `scan-hh.mjs.txt:9-11` imports only core modules), and the plugin lives in `plugins.local/ru-market`. Decision e "a shared module for makeJob and the companion" requires either a second installable file or an embedded copy with an identity test.
+- **New fields are lost in local-parser.** The key list is fixed (`local-parser.mjs:216-223`); `skills`, `seniority`, the future `employment`, `professional_role`, `injectionFlags` will not pass without extending `companion/core-contract.patch` (it currently adds `dataLevel` and others, `core-contract.patch:22`).
+- **A companion failure loses `sourceStatuses`.** In `--query` mode with a non-`ok` status the process exits with code 1 (`scan-hh.mjs.txt:292,296`); `execFile` rejects, stdout is ignored (`local-parser.mjs:242`), and in the end only the error text remains (`scan.mjs:3737-3748`), while the scan does not fail.
+- **The companion configuration is tied to `ru_market.sources.hh`.** `loadBatchConfig` looks for queries there (`scan-hh.mjs.txt:178`); after the adapter is removed the plugin will reject such a key (`config.mjs:29` checks source names).
+- **Deduplication.** HH was the main cross-deduplication board (`skill.md:15-18`); companion results go as a separate `local-parser` entry, so links between boards stop merging (core deduplicates by URL).
 
-- **Companion не может импортировать модули плагина.** Установщик копирует один файл `scan-hh.mjs` в `scripts/ru-market/` (`install.sh`, блок установки; `scan-hh.mjs.txt:9-11` импортирует только модули core), плагин лежит в `plugins.local/ru-market`. Решение e «общий модуль для makeJob и companion» требует либо второго устанавливаемого файла, либо встроенной копии с тестом на идентичность.
-- **Новые поля теряются в local-parser.** Список ключей фиксирован (`local-parser.mjs:216-223`); `skills`, `seniority`, будущие `employment`, `professional_role`, `injectionFlags` не пройдут без расширения `companion/core-contract.patch` (сейчас он добавляет `dataLevel` и др., `core-contract.patch:22`).
-- **Сбой companion теряет `sourceStatuses`.** В режиме `--query` при статусе не `ok` процесс завершается с кодом 1 (`scan-hh.mjs.txt:292,296`); `execFile` отклоняется, stdout игнорируется (`local-parser.mjs:242`), и в итоге остаётся только текст ошибки (`scan.mjs:3737-3748`), сканирование при этом не падает.
-- **Конфигурация companion привязана к `ru_market.sources.hh`.** `loadBatchConfig` ищет запросы там (`scan-hh.mjs.txt:178`); после удаления адаптера такой ключ плагин отвергнет (`config.mjs:29` проверяет имена источников).
-- **Дедупликация.** HH был основной площадкой кросс-дедупликации (`skill.md:15-18`); результаты companion идут отдельной записью `local-parser`, ссылки между площадками перестанут объединяться (core дедуплицирует по URL).
+## Decisions
 
-## Принятые решения
+Agreed with the owner; items f-k were accepted after the review and close earlier open questions. The mark "clarification" denotes a detail added during the review.
 
-Согласованы с владельцем; пункты f–k приняты после ревизии и закрывают прежние открытые вопросы. Пометка «уточнение» отмечает деталь, добавленную при ревизии.
+**a) HH: browser transport only.**
 
-**a) HH: только браузерный транспорт.**
+- Remove the API adapter `lib/hh.mjs`, its fixtures (`fixtures/hh/`), the optional variable `HH_ACCESS_TOKEN` (`manifest.json:9`, `http.mjs:25-31`), the API parts of [the HH page](../providers/hh.md), the registration in `index.mjs:2,12`, the queue and the allowed host `api.hh.ru`.
+- The only HH transport is the Playwright companion through core local-parser. The plugin cannot launch Playwright.
+- `hh` in `primary_source_order` is rejected with a `config` error with a hint about `local-parser`. The allowed lengths are derived and checked against `lib/config.mjs`: currently 3/5/6/7 (`config.mjs:31`, where 5 and 6 are hard-coded and compared with the slices `SOURCES.slice(0, n)` at `config.mjs:34-36`). After the removal `SOURCES` = habr-career, geekjob, superjob, trudvsem, getmatch, helloworld-rs, the mandatory core (`DEFAULT_SOURCES`) is habr-career and geekjob, and the allowed lengths are 2/4/5/6 (core; +superjob, trudvsem; +getmatch; all six). The hard-coded 5 and 6 in `config.mjs:31,34-36` are replaced with 4 and 5. A migration test (old lengths 3 and 7 are rejected, 2/4/5/6 are accepted, `hh` gives a migration error) is in scope. The test `test/helloworld.mjs:67` hard-codes `[3, 5, 6, 7]` and must be updated.
+- Breaking change: version 0.7.0, an entry in `RELEASE_NOTES.md`.
+- A companion failure (block, timeout) must give `sourceStatuses` with status `failed` and clear text, and the scan does not fail. The exact order is decision h.
+- Anonymous HH collection stays a recorded legal and technical risk (one line): the HH terms require working through the API ([HH page](../providers/hh.md), "Legal and technical risk"), the companion uses an anonymous browser context (`companion/README.md:5`).
 
-- Удалить API-адаптер `lib/hh.mjs`, его fixtures (`fixtures/hh/`), необязательную переменную `HH_ACCESS_TOKEN` (`manifest.json:9`, `http.mjs:25-31`), API-части `docs/providers/hh.md`, регистрацию в `index.mjs:2,12`, очередь и разрешённый хост `api.hh.ru`.
-- Единственный транспорт HH — Playwright companion через core local-parser. Плагин запускать Playwright не может.
-- `hh` в `primary_source_order` отклоняется ошибкой `config` с подсказкой про `local-parser`. Допустимые длины выведены и проверены по `lib/config.mjs`: сейчас 3/5/6/7 (`config.mjs:31`, где 5 и 6 заданы жёстко и сверяются со срезами `SOURCES.slice(0, n)` на `config.mjs:34-36`). После удаления `SOURCES` = habr-career, geekjob, superjob, trudvsem, getmatch, helloworld-rs, обязательное ядро (`DEFAULT_SOURCES`) — habr-career и geekjob, допустимы длины 2/4/5/6 (ядро; +superjob, trudvsem; +getmatch; все шесть). Жёсткие 5 и 6 в `config.mjs:31,34-36` заменяются на 4 и 5. Миграционный тест (старые длины 3 и 7 отклоняются, 2/4/5/6 принимаются, `hh` даёт ошибку миграции) входит в объём. Тест `test/helloworld.mjs:67` жёстко задаёт `[3, 5, 6, 7]` и должен быть обновлён.
-- Ломающее изменение: версия 0.7.0, запись в `RELEASE_NOTES.md`.
-- Сбой companion (блокировка, тайм-аут) должен давать `sourceStatuses` со статусом `failed` и понятным текстом, сканирование не падает. Конкретный порядок — решение h.
-- Анонимный сбор HH остаётся зафиксированным правовым и техническим риском (одна строка): условия HH требуют работы через API (`docs/providers/hh.md:48`), companion использует анонимный браузерный контекст (`companion/README.md:5`).
+**b) Filters: hybrid.** Server-side parameters for browser HH are set through `parser.args`: `search_field`, `excluded_text`, `professional_role`, `only_with_salary`. `experience`, `employment`, `salary` are passed as Job fields and filtered by core (see [core-job-filters.md](core-job-filters.md)). The model is a core convention: there are no server-side filters in core providers. Clarifications: of these parameters the companion currently knows only `area` and `search_field=name` (through `--title-only`, `scan-hh.mjs.txt:122,270`); the other flags have to be added. Extraction of `experience` and `employment` from the listing card is not implemented (`scan-hh.mjs.txt:21-39` reads only title, company, place, salary, remote) and is not verified on markup; without it these fields stay unknown. The `--query` mode through local-parser is limited to 20 s by default (`local-parser.mjs:13`), several pages need `timeout_ms`.
 
-**b) Фильтры: гибрид.** Серверные параметры для браузерного HH задаются через `parser.args`: `search_field`, `excluded_text`, `professional_role`, `only_with_salary`. `experience`, `employment`, `salary` передаются полями Job, фильтрует core (см. [core-job-filters.md](core-job-filters.md)). Образец — convention core: серверных фильтров в core-провайдерах нет. Уточнения: из этих параметров companion сейчас знает только `area` и `search_field=name` (через `--title-only`, `scan-hh.mjs.txt:122,270`); остальные флаги нужно добавить. Извлечение `experience` и `employment` из карточки выдачи не реализовано (`scan-hh.mjs.txt:21-39` читает только заголовок, компанию, место, зарплату, удалёнку) и не проверено на разметке; без этого поля останутся неизвестными. Режим `--query` через local-parser ограничен 20 с по умолчанию (`local-parser.mjs:13`), для нескольких страниц нужен `timeout_ms`.
+**c) New Job fields `employment` and `professional_role`** are added in the plugin immediately as additional fields (like `dataLevel`, `eligibility`). The contract and core filters are described in [core-job-filters.md](core-job-filters.md). For the local-parser route the field list must be extended by a core patch (see findings).
 
-**c) Новые поля Job `employment` и `professional_role`** добавляются в плагине сразу как дополнительные поля (как `dataLevel`, `eligibility`). Контракт и фильтры core описываются в [core-job-filters.md](core-job-filters.md). Для маршрута local-parser требуется расширить список полей патчем core (см. находки).
+**d) getmatch: experimental filters `sa`, `pa`, `se`, `l`** are implemented without prior live verification, strictly as explicit opt-in. In the documentation they are marked "unverified"; verification goes through health and new releases, fixes in later versions. This departs from the rule "do not invent filters". Correction to the original wording: [the getmatch page](../providers/getmatch.md) had no such text; it said that this version has no server-side filters, and the ban "Do not invent query, remote or specialization filters" is in `skill.md:38-39`. Therefore the getmatch page and `skill.md` are updated in the same work package. The other parameters (`s`, `from_date`, `to_date`, `sp`, `pl`, `c`, `exclude_applied`) are not implemented.
 
-**d) getmatch: экспериментальные фильтры `sa`, `pa`, `se`, `l`** реализуются без предварительной живой проверки, строго как явное opt-in. В документации помечаются «непроверены»; проверка идёт через health и новые релизы, исправления в следующих версиях. Это отступает от запрета «не выдумывать фильтры». Поправка к исходной формулировке: в `docs/providers/getmatch.md:25` такого текста нет; там на строках 22-24 сказано, что серверных фильтров в этой версии нет, а запрет «Do not invent query, remote or specialization filters» находится в `skill.md:38-39`. Поэтому `docs/providers/getmatch.md` (строки 22-27) и `skill.md` обновляются в том же пакете работ. Остальные параметры (`s`, `from_date`, `to_date`, `sp`, `pl`, `c`, `exclude_applied`) не реализуются.
+**e) Prompt-injection protection.**
 
-**e) Защита от prompt injection.**
+- A new module `lib/untrusted.mjs`, used by `makeJob` (`lib/normalize.mjs`) and the companion script; the way the companion gets it is decision f.
+- Normalization: invisible Unicode (zero-width, bidi), control characters, HTML comments, length limits. The specific limits are set during implementation and pinned in tests.
+- Pattern detection in English and Russian: ignore previous instructions, `system:`, role markers, references to tools, `игнорируй предыдущие` ("ignore previous") and analogues. The result is an `injectionFlags` array in Job; the route to core is decision g.
+- Flagged vacancies are kept, not dropped. Counters of flagged ones go into `sourceStatuses` (formed in `paginate.mjs:54-57` and `index.mjs:30`).
+- Scope: any external-source text passing through the provider (`title`, `company`, `location`, `note`, `description`). There is no LLM classifier.
+- Residual risk: the full vacancy text is read by core modes through Playwright or WebFetch (`modes/pipeline.md:33`, `modes/scan.md:23`); protection there is a "data, not instructions" marker and the rule in `AGENTS.md:63-71`, and there is no code detector in core (a search over `*.mjs` found none). Closed by a separate upstream proposal; the draft is in the appendix.
 
-- Новый модуль `lib/untrusted.mjs`, который используют `makeJob` (`lib/normalize.mjs`) и скрипт companion; способ поставки companion — решение f.
-- Нормализация: невидимый Unicode (нулевой ширины, bidi), управляющие символы, HTML-комментарии, лимиты длины. Конкретные лимиты задаются при реализации и фиксируются в тестах.
-- Детекция шаблонов на английском и русском: ignore previous instructions, `system:`, маркеры ролей, ссылки на инструменты, «игнорируй предыдущие» и аналоги. Результат — массив `injectionFlags` в Job; маршрут до core — решение g.
-- Помеченные вакансии сохраняются, а не отбрасываются. Счётчики помеченных попадают в `sourceStatuses` (формируются в `paginate.mjs:54-57` и `index.mjs:30`).
-- Область: любой текст внешнего источника, проходящий через провайдер (`title`, `company`, `location`, `note`, `description`). LLM-классификатора нет.
-- Остаточный риск: полный текст вакансии читают режимы core через Playwright или WebFetch (`modes/pipeline.md:33`, `modes/scan.md:23`); защита там — маркер «данные, не инструкции» и правило в `AGENTS.md:63-71`, кодового детектора в core нет (поиск по `*.mjs` не нашёл ни одного). Закрывается отдельным предложением в upstream; черновик — в приложении.
+**f) Shared module in the companion: a managed second file.** `lib/untrusted.mjs` is installed as a second managed file `scripts/ru-market/lib/untrusted.mjs` next to the companion; the companion imports it, the single source of truth stays in the plugin, no embedded copy. `install.sh` applies to it the same rule as to `scan-hh.mjs`: refuse on local edits or an unmanaged file (the `sha256` check against `scan-hh.install.json`). This is a template for future browser and local-parser providers: the directory `scripts/ru-market/lib/` is shared, not tied to HH. The file is published in the release the same way as `companion/scan-hh.mjs.txt`.
 
-**f) Общий модуль в companion: управляемый второй файл.** `lib/untrusted.mjs` устанавливается вторым управляемым файлом `scripts/ru-market/lib/untrusted.mjs` рядом с companion; companion импортирует его, единственный источник правды остаётся в плагине, встроенной копии нет. `install.sh` применяет к нему то же правило, что к `scan-hh.mjs`: отказ при локальных правках или неуправляемом файле (проверка `sha256` по `scan-hh.install.json`). Это шаблон для будущих браузерных и local-parser провайдеров: каталог `scripts/ru-market/lib/` общий, не привязан к HH. Файл публикуется в релизе так же, как `companion/scan-hh.mjs.txt`.
+**g) One combined core patch** (an extension of `companion/core-contract.patch`, applied locally by the installer; no upstream change is needed to work). It passes `employment`, `professional_role` (later `seniority`, `skills` per `core-job-filters.md`) through the local-parser key list (`local-parser.mjs:216-223`), passes injection flags and fixes the salary shape (decision k). Code check for flags: `buildTrustValidator` computes flags only from `url` and `company` (`_trust-validator.mjs:203-244`: `missing_apply_url`, `invalid_url`, `suspicious_domain`, `company_domain_mismatch`), and `scan.mjs:3617-3621` overwrites `trustScore`, `trustFlags`, `trustLevel` with the validator result; local-parser does not pass these keys. Therefore an externally set trust flag cannot be passed by a provider. The chosen route: the provider passes `injectionFlags` (an array of strings) as an input field, the patch passes it through local-parser and adds to the validator a rule that adds a flag to `trustFlags` and lowers `trustScore` from this field. The flags reach the existing output (`scan.mjs:2518-2539`, `4034-4036`) without a separate mechanism. A new Job field is needed in any case; one trust mechanism alone is not enough. Agreed: `injectionFlags` is an array of identifiers of triggered patterns; the validator rule adds ONE flag `prompt-injection-suspected` per vacancy and lowers `trustScore` by 30 once regardless of the number of patterns (floor 0). Flagged vacancies are kept. With `trust_filter.enabled: false` the validator degenerates into a no-op (`_trust-validator.mjs:184-186`), the field stays on the Job. One upstream proposal goes with the patch (fields, flags, salary; appendix). Core updates may require reinstalling the patch (`companion/README.md:5`).
 
-**g) Один объединённый патч core** (расширение `companion/core-contract.patch`, применяется установщиком локально; для работы изменение upstream не требуется). Он пропускает `employment`, `professional_role` (позже `seniority`, `skills` по `core-job-filters.md`) через список ключей local-parser (`local-parser.mjs:216-223`), пропускает флаги инъекций и исправляет форму зарплаты (решение k). Проверка кода для флагов: `buildTrustValidator` считает флаги только по `url` и `company` (`_trust-validator.mjs:203-244`: `missing_apply_url`, `invalid_url`, `suspicious_domain`, `company_domain_mismatch`), а `scan.mjs:3617-3621` перезаписывает `trustScore`, `trustFlags`, `trustLevel` результатом валидатора; local-parser эти ключи не пропускает. Поэтому внешне заданные trust-флаги провайдер передать не может. Выбранный маршрут: провайдер передаёт `injectionFlags` (массив строк) как входное поле, патч пропускает его через local-parser и добавляет в валидатор правило, которое по этому полю добавляет флаг в `trustFlags` и снижает `trustScore`. Флаги попадают в существующий вывод (`scan.mjs:2518-2539`, `4034-4036`) без отдельного механизма. Новое поле Job нужно в любом случае, обойтись одним trust-механизмом нельзя. Согласовано: `injectionFlags` — массив идентификаторов сработавших шаблонов; правило валидатора добавляет ОДИН флаг `prompt-injection-suspected` на вакансию и снижает `trustScore` на 30 один раз независимо от числа шаблонов (нижняя граница 0). Помеченные вакансии сохраняются. При `trust_filter.enabled: false` валидатор вырождается в no-op (`_trust-validator.mjs:184-186`), поле остаётся в Job. Вместе с патчем идёт одно предложение upstream (поля, флаги, зарплата; приложение). Обновления core могут потребовать переустановки патча (`companion/README.md:5`).
+**h) Companion failure.** On a failure encoded in `sourceStatuses` the companion exits with code 0 and emits partial vacancies plus `sourceStatuses` (reason, number of completed pages). This works with the current core: local-parser keeps `sourceStatuses` (`local-parser.mjs:262-268`), and `scan.mjs:3601-3607` turns every non-`ok` status into an error entry, so the failure is visible in the scan summary and not only in the exit code. A non-zero code remains for configuration errors and for collection with `--scan`; the condition `process.exitCode = 1` (`scan-hh.mjs.txt:292`) changes for the `--query` mode. Criterion 4 and a test are mandatory.
 
-**h) Сбой companion.** При сбое, закодированном в `sourceStatuses`, companion завершается с кодом 0 и выдаёт частичные вакансии плюс `sourceStatuses` (причина, число завершённых страниц). Это работает с текущим core: local-parser сохраняет `sourceStatuses` (`local-parser.mjs:262-268`), а `scan.mjs:3601-3607` превращает каждый статус не `ok` в запись об ошибке, поэтому сбой виден в итоге сканирования, а не только в коде выхода. Ненулевой код остаётся для ошибок конфигурации и сбора с `--scan`; условие `process.exitCode = 1` (`scan-hh.mjs.txt:292`) для режима `--query` меняется. Критерий 4 и тест обязательны.
+**i) HH configuration.** A separate `portals.yml` entry with an `hh_browser` block (model: `examples/hh-browser.yml`); `parser.args` point to it; the companion stops reading `ru_market.sources.hh` (`scan-hh.mjs.txt:178`). This is a template for any future Playwright provider. The configuration is read on every run, so it changes without reinstalling.
 
-**i) Конфигурация HH.** Отдельная запись в `portals.yml` с блоком `hh_browser` (образец `examples/hh-browser.yml`); `parser.args` указывают на неё; companion перестаёт читать `ru_market.sources.hh` (`scan-hh.mjs.txt:178`). Это шаблон для любого будущего Playwright-провайдера. Конфигурация читается при каждом запуске, поэтому меняется без переустановки.
-
-**j) Кросс-площадочная дедупликация.** Планируется отдельной работой (объём и риски). Как дедуплицирует core: нормализованный URL проверяется против истории, pipeline и вакансий этого же запуска (`scan.mjs:3685-3689`, `normalizeUrlForDedup` `:1486`), затем ключ `компания::роль` (`companyRoleDedupKey` `:2116`, роль через `normalizeRoleForDedup` `:2031`, компания через `canonicalizeCompany` и `company_aliases`), в том числе против вакансий, уже принятых из других записей этого запуска (`:3695-3722`). Для записи с `aggregator: true` ключ компания+роль не применяется, остаётся только URL (`:3695-3697`). Вывод: одна вакансия из записи ru-market (habr) и записи HH (local-parser) с разными URL объединится по ключу компания+роль, если компания и должность совпадают после нормализации; записи обрабатываются параллельно (`CONCURRENCY = 10`, `parallelFetch`), побеждает запись, завершившаяся первой; порядок в `portals.yml` и `primary_source_order` победителя не определяют; альтернативные ссылки теряются (плагин сейчас сохраняет их в `note`, `lib/dedup.mjs`). Согласовано: core не менять. Чтобы данные HH гарантированно побеждали, HH запускается отдельным сканированием раньше остальных (`--company "HH browser"`), последующее сканирование отбрасывает дубликат. Companion отдаёт `company` и `title` как на странице. Различия в написании компании решаются через `company_aliases` в `portals.yml` (формат `Каноническое имя: [алиас, ...]`, регистр не важен, `templates/portals.example.yml:1575-1591`, `scan.mjs:1819`), например:
+**j) Cross-board deduplication.** Planned as separate work (scope and risks). How core deduplicates: the normalized URL is checked against history, the pipeline and vacancies of the same run (`scan.mjs:3685-3689`, `normalizeUrlForDedup` `:1486`), then the key `company::role` (`companyRoleDedupKey` `:2116`, role via `normalizeRoleForDedup` `:2031`, company via `canonicalizeCompany` and `company_aliases`), including against vacancies already accepted from other entries of the same run (`:3695-3722`). For an entry with `aggregator: true` the company+role key is not applied, only the URL remains (`:3695-3697`). Conclusion: one vacancy from the ru-market entry (habr) and the HH entry (local-parser) with different URLs is merged by the company+role key if the company and the position match after normalization; entries are processed in parallel (`CONCURRENCY = 10`, `parallelFetch`), the entry that finished first wins; the order in `portals.yml` and `primary_source_order` does not determine the winner; alternative links are lost (the plugin currently keeps them in `note`, `lib/dedup.mjs`). Agreed: do not change core. To make HH data win for certain, HH is run as a separate scan earlier than the rest (`--company "HH browser"`), and the following scan drops the duplicate. The companion returns `company` and `title` as on the page. Differences in company spelling are solved through `company_aliases` in `portals.yml` (format `Canonical name: [alias, ...]`, case-insensitive, `templates/portals.example.yml:1575-1591`, `scan.mjs:1819`), for example:
 
 ```yaml
 company_aliases:
   Яндекс: [Yandex, ООО Яндекс]
 ```
 
-Потеря альтернативных ссылок у объединённых дубликатов принимается, новое поле не вводится.
+Loss of alternative links for merged duplicates is accepted, no new field is introduced.
 
-**k) Зарплата.** Источник правды — `compensation {min, max, currency, period, taxBasis, rawText}`. `salary` отдаётся как `{min, max, currency}`; устаревшая форма `{from, to}` убирается (`normalize.mjs:59,91`). Расхождение на стороне core: `local-parser.mjs:225-229` принимает `from`/`to`, а `scan.mjs:1006` читает `min`/`max`, поэтому `salary` из local-parser не участвует в `salary_filter` без `compensation`. Исправление входит в объединённый патч и в предложение upstream.
+**k) Salary.** The source of truth is `compensation {min, max, currency, period, taxBasis, rawText}`. `salary` is emitted as `{min, max, currency}`; the legacy form `{from, to}` is removed (`normalize.mjs:59,91`). A discrepancy on the core side: `local-parser.mjs:225-229` accepts `from`/`to`, while `scan.mjs:1006` reads `min`/`max`, so `salary` from local-parser does not take part in `salary_filter` without `compensation`. The fix is part of the combined patch and of the upstream proposal.
 
-## Объём работ
+### Out of scope
 
-- [x] Удалить `lib/hh.mjs`, `fixtures/hh/`, `HH_ACCESS_TOKEN` из `manifest.json` и `http.mjs`, `api.hh.ru` из `allowedHosts`, `assertRequestUrl` и очереди, регистрацию в `index.mjs`, API-разделы `docs/providers/hh.md`, `skill.md`, `README.md`, `examples/portals.yml`.
-- [x] Перестроить `lib/config.mjs`: убрать `hh` из `SOURCES` и `DEFAULT_SOURCES`, отклонять `hh` в `primary_source_order` и `sources.hh` с подсказкой про `local-parser`, пересчитать допустимые длины.
-- [x] Конфигурация HH: отдельная запись `portals.yml` с `hh_browser`, `parser.args` на неё, companion не читает `ru_market.sources.hh`; обновить `examples/hh-browser.yml`, `companion/README.md`, `README.md`.
-- [x] Companion: флаги `search_field`, `excluded_text`, `professional_role`, `only_with_salary`; при сбое в режиме `--query` код выхода 0, частичные вакансии и `sourceStatuses` (причина, завершённые страницы).
-- [x] Добавить поля `employment`, `professional_role`, `injectionFlags` в `makeJob`; расширить `companion/core-contract.patch` одним патчем: список ключей local-parser, правило trust-валидатора по `injectionFlags`, форма `salary` `{min,max,currency}` (решения g, k); указать в сообщениях установщика, что обновление core может потребовать переустановки.
-- [x] Исправить `salary` в плагине: `{min,max,currency}`, без `{from,to}`; `compensation` остаётся источником правды.
-- [x] `install.sh` и релиз: второй управляемый файл `scripts/ru-market/lib/untrusted.mjs` с тем же правилом отказа при локальных правках; общий каталог `scripts/ru-market/lib/` для будущих провайдеров.
-- [x] Дедупликация между записями: README описывает порядок запуска (HH отдельным сканированием раньше остальных) и `company_aliases` с примером; интеграционный тест подтверждает, что при раннем отдельном сканировании HH остаётся. Порядок записей в файле победителя не определяет.
-- [x] getmatch: опции `sa`, `pa`, `se`, `l` в `config.mjs` и `getmatch.mjs`, по умолчанию выключены, пометка «непроверены»; обновить `docs/providers/getmatch.md` (строки 22-27), `skill.md` (строки 38-39), `examples/portals.yml`.
-- [x] Модуль `lib/untrusted.mjs`: нормализация и детекция, `injectionFlags`, счётчики в `sourceStatuses`; подключить к `makeJob` и companion через общий файл (решение f).
-- [x] Тесты: unit-тесты `untrusted.mjs` (русские и английские шаблоны, невидимый Unicode, bidi, управляющие символы, HTML-комментарии, лимиты, ложные срабатывания); тест миграции конфигурации (`hh` даёт ошибку миграции, старые длины 3 и 7 отклоняются, 2/4/5/6 принимаются; обновить `test/helloworld.mjs:67`, где задано `[3, 5, 6, 7]`); обновление fixtures и `test/run.mjs` (все ссылки на hh, строки 4, 20-23, 98-111, 146-161); тесты фильтров getmatch.
-- [x] Выровнять закрепление core в `.github/workflows/test.yml` и `health.yml` либо задокументировать различие. Различие задокументировано комментариями в `test.yml` и `health.yml`; существование коммитов офлайн не проверено.
-- [x] `RELEASE_NOTES.md` (раздел 0.7.0 с описанием ломающего изменения), `README.md`, поднять версию в `manifest.json`, `package.json`, `http.mjs:5`.
+- Server-side filters beyond those listed in b) and d).
+- Automatic editing of `portals.yml`.
+- Live requests to getmatch in the document preparation phase.
+- Upstream core changes: edits go only through a local installer patch; the detector for raw vacancy text and Job fields are moved into one upstream proposal (appendix).
+- An LLM injection classifier.
+- Adapters for Armenia and Yandex.
 
-## Критерии готовности
+### Risks
 
-1. В `lib/`, `index.mjs`, `manifest.json` и тестах нет ссылок на `api.hh.ru`, `HH_ACCESS_TOKEN` и `lib/hh.mjs`; `npm test` проходит.
-2. `parseConfig` с `hh` в `primary_source_order` или `sources.hh` выбрасывает ошибку категории `config` с текстом про `local-parser`; тест миграции проверяет новые допустимые длины.
-3. `source: all` не обращается к HH и не выдаёт `failed` по hh.
-4. Блокировка или тайм-аут companion в режиме `--query` завершается кодом 0, отдаёт частичные вакансии и `sourceStatuses` со статусом `failed` или `partial`, причиной и числом завершённых страниц; в сводке и receipt `scan.mjs` сбой виден как ошибка источника, а не только в коде выхода; сканирование не падает (интеграционный тест).
-5. `employment` и `professional_role` присутствуют в Job и после применения объединённого патча доходят до core через local-parser; их фильтрация описана в `core-job-filters.md`.
-6. getmatch без новых опций отправляет те же запросы, что и в 0.6.0; с опциями — добавляет только `sa`, `pa`, `se`, `l`; в документации они помечены «непроверены».
-7. `untrusted.mjs` покрыт тестами: невидимые символы и HTML-комментарии удалены, длины ограничены, шаблоны RU и EN дают `injectionFlags`, обычные вакансии флагов не получают.
-8. Вакансия с флагами остаётся в результате; число помеченных видно в `sourceStatuses`, а флаг виден в `trustFlags` вывода scan (с патчем).
-9. Companion импортирует `scripts/ru-market/lib/untrusted.mjs`, а не копию; установщик отказывает при локально изменённом файле; результаты companion и `makeJob` совпадают на общих тестовых строках.
-10. `RELEASE_NOTES.md` содержит запись 0.7.0 с описанием ломающего изменения и миграции.
-11. `salary` у вакансий плагина и companion имеет форму `{min,max,currency}`, `{from,to}` нигде не выдаётся; с патчем `salary_filter` учитывает `salary` из local-parser.
-12. Запись HH в `portals.yml` с `hh_browser` работает без `ru_market.sources.hh`; смена `hh_browser` действует без переустановки.
-13. README описывает порядок запуска (HH отдельным сканированием раньше остальных) и `company_aliases` с примером; интеграционный тест подтверждает, что при дубликате остаётся вакансия HH.
-14. Правило валидатора даёт один флаг `prompt-injection-suspected` и снижает `trustScore` на 30 один раз (не ниже 0) для любого числа шаблонов; при `trust_filter.enabled: false` `injectionFlags` остаётся в Job.
+- Removing hh breaks existing configurations (minimized by an error with a hint and a changelog entry).
+- getmatch filters without verification may be wrong or unstable; opt-in and the "unverified" mark limit the impact.
+- Detection heuristics give false positives and misses; the flag is informational, vacancies are not dropped.
+- Filters by `experience`, `employment` are impossible until the companion extracts this data.
+- Loss of merging HH with habr and geekjob inside the plugin: the winner is determined by which scan finished first (HH is run separately and earlier), alternative links of merged duplicates are lost (accepted), different spelling of the company needs `company_aliases` (decision j).
+- The combined core patch may not apply after a core update; reinstallation is needed, and on incompatibility the installer refuses (`install.sh`, branch "Cannot apply core contract cleanly").
+- The second managed file widens the installer surface: a local edit of the shared module blocks the companion update.
+- A companion failure with code 0 must not be confused with success: it must reach the summary through `sourceStatuses`, otherwise data is lost silently.
 
-## Что не делаем
+## Scope
 
-- Серверные фильтры шире перечисленных в b) и d).
-- Автоматическое редактирование `portals.yml`.
-- Живые запросы к getmatch в фазе подготовки документов.
-- Изменения upstream core: правки идут только локальным патчем установщика; детектор для сырого текста вакансии и поля Job выносятся в одно предложение upstream (приложение).
-- LLM-классификатор инъекций.
-- Адаптеры для Армении и Яндекса.
+- [x] Remove `lib/hh.mjs`, `fixtures/hh/`, `HH_ACCESS_TOKEN` from `manifest.json` and `http.mjs`, `api.hh.ru` from `allowedHosts`, `assertRequestUrl` and the queue, the registration in `index.mjs`, the API sections of the HH page, `skill.md`, `README.md`, `examples/portals.yml`.
+- [x] Rebuild `lib/config.mjs`: remove `hh` from `SOURCES` and `DEFAULT_SOURCES`, reject `hh` in `primary_source_order` and `sources.hh` with a hint about `local-parser`, recompute the allowed lengths.
+- [x] HH configuration: a separate `portals.yml` entry with `hh_browser`, `parser.args` pointing to it, the companion does not read `ru_market.sources.hh`; update `examples/hh-browser.yml`, `companion/README.md`, `README.md`.
+- [x] Companion: flags `search_field`, `excluded_text`, `professional_role`, `only_with_salary`; on failure in `--query` mode exit code 0, partial vacancies and `sourceStatuses` (reason, completed pages).
+- [x] Add the fields `employment`, `professional_role`, `injectionFlags` to `makeJob`; extend `companion/core-contract.patch` with one patch: the local-parser key list, a trust-validator rule on `injectionFlags`, the `salary` shape `{min,max,currency}` (decisions g, k); state in the installer messages that a core update may require reinstalling.
+- [x] Fix `salary` in the plugin: `{min,max,currency}`, no `{from,to}`; `compensation` stays the source of truth.
+- [x] `install.sh` and release: the second managed file `scripts/ru-market/lib/untrusted.mjs` with the same refusal rule on local edits; a shared directory `scripts/ru-market/lib/` for future providers.
+- [x] Deduplication between entries: the README describes the run order (HH as a separate scan earlier than the rest) and `company_aliases` with an example; an integration test confirms that with an early separate scan HH stays. The entry order in the file does not determine the winner.
+- [x] getmatch: options `sa`, `pa`, `se`, `l` in `config.mjs` and `getmatch.mjs`, off by default, marked "unverified"; update [the getmatch page](../providers/getmatch.md), `skill.md` (lines 38-39), `examples/portals.yml`.
+- [x] Module `lib/untrusted.mjs`: normalization and detection, `injectionFlags`, counters in `sourceStatuses`; connect to `makeJob` and the companion through the shared file (decision f).
+- [x] Tests: unit tests of `untrusted.mjs` (Russian and English patterns, invisible Unicode, bidi, control characters, HTML comments, limits, false positives); a configuration migration test (`hh` gives a migration error, old lengths 3 and 7 are rejected, 2/4/5/6 are accepted; update `test/helloworld.mjs:67`, where `[3, 5, 6, 7]` is set); update of fixtures and `test/run.mjs` (all references to hh, lines 4, 20-23, 98-111, 146-161); getmatch filter tests.
+- [x] Align the core pinning in `.github/workflows/test.yml` and `health.yml` or document the difference. The difference is documented by comments in `test.yml` and `health.yml`; existence of the commits was not checked offline.
+- [x] `RELEASE_NOTES.md` (a 0.7.0 section describing the breaking change), `README.md`, bump the version in `manifest.json`, `package.json`, `http.mjs:5`.
 
-## Риски
+## Acceptance criteria
 
-- Удаление hh ломает существующие конфигурации (минимизируется ошибкой с подсказкой и записью в changelog).
-- Фильтры getmatch без проверки могут быть неверными или нестабильными; opt-in и пометка ограничивают влияние.
-- Эвристики детекции дают ложные срабатывания и пропуски; флаг информационный, вакансии не отбрасываются.
-- Фильтры по `experience`, `employment` невозможны, пока companion не извлекает эти данные.
-- Потеря объединения HH с habr и geekjob внутри плагина: победитель определяется тем, какое сканирование завершилось раньше (HH запускается отдельно и раньше), альтернативные ссылки у объединённых дубликатов теряются (принято), разное написание компании требует `company_aliases` (решение j).
-- Объединённый патч core может не примениться после обновления core; нужна переустановка, установщик при несовместимости отказывает (`install.sh`, ветка «Cannot apply core contract cleanly»).
-- Второй управляемый файл расширяет поверхность установщика: локальная правка общего модуля блокирует обновление companion.
-- Сбой companion с кодом 0 нельзя путать с успехом: он обязан попадать в сводку через `sourceStatuses`, иначе данные теряются молча.
+1. There are no references to `api.hh.ru`, `HH_ACCESS_TOKEN` and `lib/hh.mjs` in `lib/`, `index.mjs`, `manifest.json` and tests; `npm test` passes.
+2. `parseConfig` with `hh` in `primary_source_order` or `sources.hh` throws an error of category `config` with text about `local-parser`; the migration test checks the new allowed lengths.
+3. `source: all` does not contact HH and does not emit `failed` for hh.
+4. A block or timeout of the companion in `--query` mode ends with code 0, returns partial vacancies and `sourceStatuses` with status `failed` or `partial`, a reason and the number of completed pages; in the `scan.mjs` summary and receipt the failure is visible as a source error, not only in the exit code; the scan does not fail (integration test).
+5. `employment` and `professional_role` are present in Job and after applying the combined patch reach core through local-parser; their filtering is described in `core-job-filters.md`.
+6. getmatch without the new options sends the same requests as in 0.6.0; with options it adds only `sa`, `pa`, `se`, `l`; in the documentation they are marked "unverified".
+7. `untrusted.mjs` is covered by tests: invisible characters and HTML comments are removed, lengths limited, RU and EN patterns give `injectionFlags`, ordinary vacancies get no flags.
+8. A vacancy with flags stays in the result; the number of flagged ones is visible in `sourceStatuses`, and the flag is visible in `trustFlags` of the scan output (with the patch).
+9. The companion imports `scripts/ru-market/lib/untrusted.mjs`, not a copy; the installer refuses on a locally modified file; companion and `makeJob` results match on shared test strings.
+10. `RELEASE_NOTES.md` contains a 0.7.0 entry describing the breaking change and the migration.
+11. `salary` of plugin and companion vacancies has the shape `{min,max,currency}`, `{from,to}` is never emitted; with the patch `salary_filter` takes into account `salary` from local-parser.
+12. An HH entry in `portals.yml` with `hh_browser` works without `ru_market.sources.hh`; changing `hh_browser` takes effect without reinstalling.
+13. The README describes the run order (HH as a separate scan earlier than the rest) and `company_aliases` with an example; an integration test confirms that with a duplicate the HH vacancy stays.
+14. The validator rule gives one flag `prompt-injection-suspected` and lowers `trustScore` by 30 once (not below 0) for any number of patterns; with `trust_filter.enabled: false` `injectionFlags` stays in Job.
 
-Открытые решения: как в будущем добавлять запись hh в `portals.yml` (команда или управляемый блок; до тех пор вручную, см. `README.md`); конкретные лимиты длины и список шаблонов; детали повышения версии (0.7.0, синхронизация `manifest.json`, `package.json`, `USER_AGENT` в `http.mjs:5`). Проверить при реализации: поведение объединённого патча на других версиях core; дедупликацию на живых данных; возможность повторного использования правила `sha256` из `install.sh` для второго управляемого файла.
+## Open decisions
 
-## Приложение: черновик issue для upstream
+How to add the hh entry to `portals.yml` in the future (a command or a managed block; manually until then, see `README.md`); the specific length limits and the list of patterns; details of the version bump (0.7.0, syncing `manifest.json`, `package.json`, `USER_AGENT` in `http.mjs:5`). To check during implementation: behaviour of the combined patch on other core versions; deduplication on live data; the possibility of reusing the `sha256` rule from `install.sh` for the second managed file.
 
-Заголовок: Detector and marker for untrusted raw job descriptions read by pipeline and scan modes.
+## Appendix: draft issue for upstream
 
-Текст:
+Title: Detector and marker for untrusted raw job descriptions read by pipeline and scan modes.
+
+Text:
 
 > Summary. `AGENTS.md` ("Untrusted External Content") requires that job postings are treated as data, never instructions. In `modes/pipeline.md` (step 2a) and `modes/scan.md` the raw posting text is fetched with Playwright or WebFetch and passed to the model as-is. Enforcement relies on prompt wording only. A grep of the repository finds no code-level detector for instruction-like text.
 >
@@ -197,15 +188,15 @@ company_aliases:
 >
 > Acceptance. Unit tests with English and Russian patterns, invisible-Unicode and HTML-comment cases; a fixture posting with an embedded instruction is reported as an anomaly and does not alter the mode's output files.
 
-## Итоги реализации
+## Implementation results
 
-Выполнено в 0.7.0 (ветка `feature/provider-architecture-review`, без коммитов). Отклонения и уточнения:
+Done in 0.7.0 (branch `feature/provider-architecture-review`, without commits at the time). Deviations and clarifications:
 
-- **Решение j и критерий 13 исправлены (изначально предполагали порядок записей, для core это неверно).** `scan.mjs` обрабатывает записи параллельно (`CONCURRENCY = 10`, `parallelFetch`), дубликат остаётся у записи, завершившейся первой, а не стоящей первой в `portals.yml`. Запись HH (браузер) обычно медленнее. Детерминированный вариант, проверенный интеграционным тестом: сначала отдельное сканирование HH (`--company "HH browser"`), затем остальные. README описывает фактическое поведение.
-- Правило trust-валидатора работает только при настроенном `trust_filter` (без него валидатор no-op, как и в решении g). Нижняя граница 0 реализована, но с текущими штрафами core недостижима (минимальный балл до правила 40).
-- `employment` и `professional_role` заполняют только SuperJob (`type_of_work`, `catalogues`) и Работа России (`employment`, `category.specialisation`); имена полей API не проверены живыми запросами. Companion их не извлекает.
-- Форма `employment`/`professional_role`: `{values, rawLabels}`; `values` для `employment` выводятся из пяти русских меток, для `professional_role` пусты.
-- Значения getmatch `sa`, `pa`, `se`, `l`: строки или числа (`sa`, `pa` одно значение; `se`, `l` до 10), формат непроверен.
-- Для апгрейда с 0.6.0 добавлен `companion/core-contract-0.6.patch` (прежний патч для обратного применения) и ветка в `install.sh`.
-- Флаг companion `--no-artifacts` добавлен, чтобы запись `local-parser` могла запускать `--config` без каталога артефактов; `timeout_ms` реализован как дедлайн между страницами.
-- Серверные параметры HH companion не проверялись на живом HH.
+- **Decision j and criterion 13 were corrected (the entry order was initially assumed, which is wrong for core).** `scan.mjs` processes entries in parallel (`CONCURRENCY = 10`, `parallelFetch`), and the duplicate stays with the entry that finished first, not the one first in `portals.yml`. The HH (browser) entry is usually slower. The deterministic variant, verified by an integration test: first a separate HH scan (`--company "HH browser"`), then the rest. The README describes the actual behaviour.
+- The trust-validator rule works only with a configured `trust_filter` (without it the validator is a no-op, as in decision g). The floor of 0 is implemented but unreachable with the current core penalties (the minimum score before the rule is 40).
+- `employment` and `professional_role` are filled only by SuperJob (`type_of_work`, `catalogues`) and Trudvsem (`employment`, `category.specialisation`); the API field names were not verified by live requests. The companion does not extract them.
+- Shape of `employment`/`professional_role`: `{values, rawLabels}`; `values` for `employment` are derived from five Russian labels, for `professional_role` they are empty.
+- getmatch values `sa`, `pa`, `se`, `l`: strings or numbers (`sa`, `pa` a single value; `se`, `l` up to 10), format unverified.
+- For the upgrade from 0.6.0, `companion/core-contract-0.6.patch` (the previous patch for reverse application) and a branch in `install.sh` were added.
+- The companion flag `--no-artifacts` was added so that a `local-parser` entry could run `--config` without an artifact directory; `timeout_ms` is implemented as a deadline between pages.
+- HH companion server-side parameters were not verified on live HH.

@@ -1,102 +1,109 @@
-# План добавления getmatch в ru-market
+# Plan: adding getmatch to ru-market
 
-Основание: [исследование от 7 октября 2026 года](../research/getmatch.md). Статус: код адаптера, регистрация и офлайн-проверки реализованы; живой контракт и основание выпуска остаются непроверенными.
+Status: Implemented
+Date: 2026-10-07
+Type: roadmap
 
-## Цель и границы первой версии
+Shipped as an experimental opt-in source in 0.4.0 (see [RELEASE_NOTES.md](../../RELEASE_NOTES.md)); user-facing description in the [getmatch provider page](../providers/getmatch.md). The adapter code, registration and offline checks are implemented; the live contract and the basis for release remain unverified (see Open decisions).
 
-Добавить `getmatch` как шестой источник внутри существующего provider `ru-market`, сохранив установку и контракт плагина. Отдельный provider в career-ops или изменение ядра для этого не нужны.
+Basis: [research of 7 October 2026](../research/getmatch.md).
 
-Использовать JSON через `ctx.fetchJson` и существующий HTTP-слой. Анонимный доступ к списку `/api/offers` и двум карточкам подтверждён. Cookies, авторизация и Playwright не нужны для проверенных запросов. API внутренний и недокументированный: доступность и структура могут измениться.
+## Problem
 
-Первая версия читает только список: в нём уже есть название, компания, URL, описание, зарплатные поля, локации и дата. Карточки, похожие вакансии, отклики и профили не запрашивать. Браузерный fallback не добавлять. Источник выключен по умолчанию и включается явно.
+Add `getmatch` as a sixth source inside the existing `ru-market` provider, keeping the plugin installation and contract. A separate provider in career-ops or a core change is not needed for this.
 
-## 1. Условия использования до выпуска
+Use JSON through `ctx.fetchJson` and the existing HTTP layer. Anonymous access to the `/api/offers` list and two cards is confirmed. Cookies, authorization and Playwright are not needed for the verified requests. The API is internal and undocumented: availability and structure may change.
 
-Зафиксировать допустимость автоматического чтения и хранения выбранных полей. Сейчас пункт 3.2 соглашения ограничивает копирование, а robots.txt закрывает `/api/`. Анонимный HTTP 200 этих ограничений не отменяет.
+The first version reads only the list: it already contains title, company, URL, description, salary fields, locations and date. Cards, similar vacancies, applications and profiles are not requested. No browser fallback is added. The source is disabled by default and enabled explicitly.
 
-Основание выпуска: разрешение getmatch/подходящие опубликованные условия либо юридическая оценка конкретного сценария, которая разрешает использовать его в выбранных пределах. Уточнить персональное использование, распространение адаптера, описания, сроки хранения, атрибуцию и частоту запросов. Если разрешён другой API или feed, заменить технический маршрут в плане.
+## Decisions
 
-Подготовка кода и проверки на синтетических fixtures не означают разрешения на регулярный сбор. До определения основания не включать источник в автоматические сканирования, health CI и релиз как готовый к использованию. Флаг `enabled` выражает настройку пользователя, а не разрешение правообладателя.
+### 1. Terms of use before release
 
-## 2. Уточнить контракт короткой живой проверкой
+Record the permissibility of automatic reading and storage of the selected fields. Clause 3.2 of the agreement currently restricts copying, and robots.txt closes `/api/`. An anonymous HTTP 200 does not cancel these restrictions.
 
-После определения допустимого объёма проверки:
+Basis for release: permission from getmatch or suitable published terms, or a legal assessment of the specific scenario that allows its use within chosen limits. Clarify personal use, distribution of the adapter, descriptions, retention periods, attribution and request frequency. If a different API or feed is permitted, replace the technical route in the plan.
 
-1. Прочитать две соседние страницы с одинаковым небольшим `limit`: сопоставить `p`, `offset`, `meta.offset`, `meta.limit`, `meta.total` и ID обычных вакансий. Проверить, что `p` и `offset` согласованы и следующая страница действительно меняется.
-2. Уточнить спецанонсы: при `limit=1` уже вернулись три `one_day_offer_v3` и одна `vacancy`. Определить, входят ли спецанонсы в `meta.total`, повторяются ли на страницах и как ведёт себя последняя страница.
-3. Проверить по одной выборке со специализацией и географией. Значения параметров брать из интерфейса/ответа, не угадывать. В частности, свободный поиск `q` и `format=remote` не подтверждены.
-4. Уточнить вложенную структуру `company`, `location_items`, `location_requirements`, описаний и зарплат; поведение скрытой/оценочной зарплаты. Выяснить временную зону `published_at`: наблюдался timestamp без offset, который нельзя автоматически считать UTC или московским временем.
+Preparing code and checks on synthetic fixtures does not mean permission for regular collection. Until the basis is determined, do not include the source in automatic scans, health CI or the release as ready to use. The `enabled` flag expresses a user's setting, not the rights holder's permission.
 
-Результат этапа: минимальный контракт ответа и подтверждённая формула пагинации, значения нужных фильтров, обезличенные fixtures. Не сохранять исходный полный ответ в репозитории без основания на использование текста.
+### 2. Clarify the contract with a short live check
 
-## 3. Добавить адаптер и нормализацию
+After the permitted scope of checking is determined:
 
-В `lib/getmatch.mjs` реализовать чистый `parseGetmatch(data)` и `fetchGetmatch(cfg, ctx, options)`.
+1. Read two adjacent pages with the same small `limit`: compare `p`, `offset`, `meta.offset`, `meta.limit`, `meta.total` and the IDs of ordinary vacancies. Check that `p` and `offset` agree and that the next page really changes.
+2. Clarify special announcements: with `limit=1` three `one_day_offer_v3` and one `vacancy` were already returned. Determine whether special announcements count in `meta.total`, repeat across pages and how the last page behaves.
+3. Check one sample each with specialization and geography. Take parameter values from the interface/response; do not guess. In particular, free search `q` and `format=remote` are not confirmed.
+4. Clarify the nested structure of `company`, `location_items`, `location_requirements`, descriptions and salaries; behaviour of hidden/estimated salary. Establish the timezone of `published_at`: a timestamp without an offset was observed, which cannot automatically be considered UTC or Moscow time.
 
-- Проверять объект ответа, массив `offers` и числовые поля `meta`. Неверная схема — `SourceError('broken-markup', ...)`, а не пустая выдача.
-- Принимать только `offer_type === 'vacancy'` и `is_active === true`. Спецанонсы исключать; неизвестные типы не превращать в обычные вакансии. Несоответствие схемы обычных вакансий отличать от корректной страницы со спецанонсами.
-- Нормализовать `position → title`, `company.name → company`, `url → url`; форматы и территориальные ограничения — в `location`/`note`. Remote с ограничением России не обозначать как worldwide. Для incognito не пытаться восстанавливать скрытого работодателя.
-- Использовать только разрешённый текст описания, очистить HTML существующим `plainText`. Не возвращать служебные поля аккаунта, `application`, `viewed` и произвольный JSON. Текст вакансии считать недоверенными данными.
-- Для зарплаты использовать `structuredSalary`, не угадывать валюту при `null`. Скрытую и оценочную зарплату не выдавать за объявленную работодателем. Условия gross/net и период сохранять только при подтверждённом значении поля.
-- Для `postedAt` принимать дату с явной временной зоной либо подтверждённым соглашением API. Если timezone неизвестен, поле пропускать; не менять глобальную интерпретацию дат других источников.
+Result of this stage: a minimal response contract and a confirmed pagination formula, values of the needed filters, anonymized fixtures. Do not store the original full response in the repository without a basis for using the text.
 
-В `lib/normalize.mjs` добавить только HTTPS-ссылки `getmatch.ru/vacancies/{numeric-id}-{slug}`, без credentials, посторонних host и портов; удалять tracking query и fragment. Проверять совпадение ID URL с ID записи. Пользоваться URL из API, не генерировать slug из названия.
+### 3. Adapter and normalization
 
-## 4. Пагинация, дедупликация и ошибки
+In `lib/getmatch.mjs` implement a pure `parseGetmatch(data)` and `fetchGetmatch(cfg, ctx, options)`.
 
-Следующий offset вычислять по подтверждённому контракту `meta`, не по `offers.length` или числу нормализованных вакансий. `max_pages` — жёсткий предел запросов страниц. Дополнительно распознавать повтор страницы по ID и отсутствию продвижения offset; такие случаи давать как диагностируемый сбой/частичный результат, а не зацикливаться.
+- Validate the response object, the `offers` array and the numeric `meta` fields. A wrong schema is `SourceError('broken-markup', ...)`, not an empty result.
+- Accept only `offer_type === 'vacancy'` and `is_active === true`. Exclude special announcements; do not turn unknown types into ordinary vacancies. Distinguish a schema mismatch of ordinary vacancies from a correct page with special announcements.
+- Normalize `position -> title`, `company.name -> company`, `url -> url`; formats and territorial restrictions go to `location`/`note`. Do not mark remote restricted to Russia as worldwide. For incognito do not try to recover the hidden employer.
+- Use only the permitted description text, clean the HTML with the existing `plainText`. Do not return account service fields, `application`, `viewed` and arbitrary JSON. Treat vacancy text as untrusted data.
+- For salary use `structuredSalary`, do not guess the currency when `null`. Do not present hidden and estimated salary as announced by the employer. Keep gross/net terms and period only when the field value is confirmed.
+- For `postedAt` accept a date with an explicit timezone or one confirmed by the API agreement. If the timezone is unknown, omit the field; do not change the global interpretation of dates of other sources.
 
-В `lib/paginate.mjs` сейчас цикл останавливается при `!result.jobs.length`. Это неверно для страницы, содержащей только спецанонсы или отфильтрованные вакансии. Добавить необязательный признак, например `continueOnEmpty`, который адаптер выставляет только при подтверждённой следующей странице; прежнее поведение других источников сохранить. Корректная полностью отфильтрованная выдача должна возвращать `[]` со статусом `ok`.
+In `lib/normalize.mjs` add only HTTPS links `getmatch.ru/vacancies/{numeric-id}-{slug}`, without credentials, foreign hosts and ports; strip tracking query and fragment. Check that the URL ID matches the record ID. Use the URL from the API, do not generate a slug from the title.
 
-В `lib/dedup.mjs` добавить отображаемое имя `getmatch` и идентичность по числовому ID: сейчас локальная дедупликация использует последний сегмент пути целиком и считает разные slug разными вакансиями. Использовать общий helper идентичности в локальной дедупликации и сравнении одного источника; сохранить каноническую ссылку, не склеивать разные ID по похожему названию.
+### 4. Pagination, deduplication and errors
 
-Сохранять существующие `sourceStatus`/`sourceStatuses`: сбой первой страницы — `failed`, последующей — `partial` с уже полученными вакансиями. При `source: all` остальные источники продолжают работать. Для getmatch ошибка `access` должна останавливать оставшиеся маршруты источника; нынешнее специальное условие только для HH обобщить без изменения поведения остальных источников. `401/403` и CAPTCHA не повторять; для network/5xx/429 использовать ограниченные retries по существующим правилам, затем прекращать текущий маршрут. Не писать ответы и описания в логи.
+Compute the next offset from the confirmed `meta` contract, not from `offers.length` or the number of normalized vacancies. `max_pages` is a hard limit on page requests. Additionally recognize a repeated page by ID and lack of offset progress; report such cases as a diagnosable failure/partial result instead of looping.
 
-## 5. Подключить конфигурацию и сеть
+In `lib/paginate.mjs` the loop currently stops on `!result.jobs.length`. This is wrong for a page containing only special announcements or filtered vacancies. Add an optional flag, for example `continueOnEmpty`, which the adapter sets only when a next page is confirmed; keep the previous behaviour of other sources. A correct fully filtered result must return `[]` with status `ok`.
 
-| Файл | Изменение |
+In `lib/dedup.mjs` add the display name `getmatch` and identity by numeric ID: local deduplication currently uses the whole last path segment and treats different slugs as different vacancies. Use a shared identity helper in local deduplication and single-source comparison; keep the canonical link, do not merge different IDs by similar title.
+
+Keep the existing `sourceStatus`/`sourceStatuses`: failure of the first page is `failed`, of a later one `partial` with the vacancies already received. Under `source: all` the other sources keep working. For getmatch an `access` error must stop the remaining routes of the source; generalize the current special condition for HH only, without changing the behaviour of other sources. Do not retry `401/403` and CAPTCHA; for network/5xx/429 use bounded retries under existing rules, then stop the current route. Do not write responses and descriptions to logs.
+
+### 5. Configuration and network
+
+| File | Change |
 | --- | --- |
-| `index.mjs` | Импорт и регистрация `adapters.getmatch` |
-| `lib/config.mjs` | `SOURCES`, ключ `sources.getmatch`, `enabled: false`, `mode: api`/`auto`, `max_pages`, `per_page` |
-| `manifest.json` | Разрешённый host `getmatch.ru`, описание шестого источника; новые env vars не нужны для текущего анонимного маршрута |
-| `lib/http.mjs` | Разрешить только точный путь `/api/offers` для getmatch; выдавать обычный User-Agent плагина и `Accept: application/json` |
-| `lib/queue.mjs` | Очередь getmatch с concurrency 1; интервал выбрать по согласованным условиям, не называть его опубликованным лимитом API |
+| `index.mjs` | Import and register `adapters.getmatch` |
+| `lib/config.mjs` | `SOURCES`, key `sources.getmatch`, `enabled: false`, `mode: api`/`auto`, `max_pages`, `per_page` |
+| `manifest.json` | Allowed host `getmatch.ru`, description of the sixth source; no new env vars needed for the current anonymous route |
+| `lib/http.mjs` | Allow only the exact path `/api/offers` for getmatch; send the plugin's ordinary User-Agent and `Accept: application/json` |
+| `lib/queue.mjs` | getmatch queue with concurrency 1; choose the interval according to agreed terms, do not call it a published API limit |
 
-Сохранить нынешние три default sources и поддержку `primary_source_order` из трёх и пяти источников. Дополнительно поддержать полный список из шести; отсутствующие необязательные источники дописывать в стабильном порядке. По умолчанию getmatch имеет последний приоритет. Явный `source: getmatch` требует `sources.getmatch.enabled: true`, как нынешние необязательные источники.
+Keep the then-current three default sources and support for `primary_source_order` of three and five sources. Additionally support a full list of six; append missing optional sources in a stable order. By default getmatch has the lowest priority. An explicit `source: getmatch` requires `sources.getmatch.enabled: true`, like the current optional sources.
 
-Начальные значения: `max_pages: 1`, `per_page: 20` — предлагаемые настройки, которые требуется подтвердить на этапе 2. До проверки фильтров MVP может читать ограниченную общую выдачу. Не добавлять `queries` с фиктивным серверным поиском. Подтверждённые специализации, локации и seniority вводить отдельными валидируемыми опциями; при локальном keyword-фильтре явно указать, что он покрывает только загруженные страницы.
+Initial values: `max_pages: 1`, `per_page: 20` are proposed settings that must be confirmed at stage 2. Until the filters are checked the MVP may read a bounded general listing. Do not add `queries` with a fictitious server-side search. Introduce confirmed specializations, locations and seniority as separate validated options; for a local keyword filter state explicitly that it covers only the loaded pages.
 
-Все вызовы проходят через `request` и `ctx.fetchJson`; прямой `fetch` в адаптере не использовать. Добавление host в manifest может потребовать штатного повторного согласия пользователя в career-ops при обновлении плагина — описать это в release notes.
+All calls go through `request` and `ctx.fetchJson`; do not use direct `fetch` in the adapter. Adding a host to the manifest may require the standard renewed user consent in career-ops on plugin update; describe this in the release notes.
 
-## 6. Проверки и критерии готовности
+## Scope
 
-В `test/run.mjs` и fixtures добавить проверки:
+- [x] `getmatch` registered as the sixth opt-in source of ru-market; HTTP allows only `/api/offers`, queue concurrency 1 / 1000 ms.
+- [x] Configuration, URL normalization, identity by ID and continuation over empty filtered pages wired in. Old orders of three and five sources preserved.
+- [x] Synthetic fixture and 11 getmatch scenarios added; integration checks that getmatch reaches the pipeline and scan history through a real guarded context with substituted HTTP.
+- [x] Documentation: [getmatch provider page](../providers/getmatch.md); a separate health check `--source getmatch`, without changing the default health.
+- [x] README, `examples/portals.yml`, `skill.md`, manifest description and release notes updated; getmatch kept disabled in the example. The undocumented API, absence of mandatory authorization, exclusion of special announcements, page-bound coverage and the legal basis are described.
+- [ ] Live pass, confirmation of the pagination contract and of the basis for release not performed. Full descriptions are not copied; the personal portals.yml was not changed.
+- [ ] Publish a version with the source as ready to use only after the checks and determination of the terms of use (separate step).
 
-- смешанная выдача из спецанонсов и активных вакансий; исключение архива и неизвестных типов;
-- скрытая/оценочная зарплата, timezone без offset, incognito и территориальный remote;
-- изменение slug при одном ID, разные ID одинаковых вакансий, посторонние ссылки;
-- пустая выдача против сломанной схемы; страница без подходящих jobs с продолжением; повтор ID/offset;
-- пагинация при `offers.length > meta.limit`, жёсткий лимит страниц, partial failure и stop при access;
-- выключенный getmatch в `all`, явно включённый источник, старые конфигурации порядка из трёх/пяти и новый порядок из шести;
-- разрешён только `/api/offers`: карточки, профили, auth, apply, сторонние host и нестандартные порты остаются запрещены;
-- health делает максимум один запрос getmatch без retries, только когда проверка getmatch явно включена; логи не содержат payload.
+Recommended order of work: clarify terms, check the contract, adapter and fixtures, configuration/network/deduplication, regression and integration checks, bounded dry-run, documentation and release. If the terms are not confirmed, the result is limited to prepared code and local checks; regular collection and release of the source stay deferred.
 
-Запустить `npm test` и `CAREER_OPS_ROOT=../career-ops npm run test:integration`. После определения условий использования выполнить один ограниченный живой проход через настоящий `ctx`, затем проверить `scan --dry-run` и укладывание hook в timeout хоста. Текущий стандартный timeout ядра — 15 секунд; не увеличивать число запросов/страниц, не оценив общий бюджет вызова с retries.
+## Acceptance criteria
 
-Готовность: обычные активные вакансии поступают в существующий pipeline, спецанонсы исключены, ссылки сохраняются, ошибки явно диагностируются, старые источники работают как прежде, разрешённый объём хранения и сбор соблюдены.
+1. Mixed output of special announcements and active vacancies is handled; archive and unknown types are excluded.
+2. Hidden/estimated salary, a timezone without an offset, incognito and territorial remote are handled correctly.
+3. A slug change with one ID, different IDs of identical vacancies and foreign links are handled correctly.
+4. An empty result is distinguished from a broken schema; a page without suitable jobs continues; a repeated ID/offset is detected.
+5. Pagination works when `offers.length > meta.limit`; the hard page limit, partial failure and stop on access hold.
+6. A disabled getmatch in `all`, an explicitly enabled source, old configurations of three/five and the new order of six all work.
+7. Only `/api/offers` is allowed: cards, profiles, auth, apply, foreign hosts and non-standard ports stay forbidden.
+8. Health makes at most one getmatch request without retries, only when the getmatch check is explicitly enabled; logs contain no payload.
+9. `npm test` and `CAREER_OPS_ROOT=../career-ops npm run test:integration` pass. After the terms of use are determined, one bounded live pass through a real `ctx`, then `scan --dry-run`, and the hook fits within the host timeout. The current standard core timeout is 15 seconds; do not increase the number of requests/pages without estimating the total call budget with retries.
+10. Readiness: ordinary active vacancies reach the existing pipeline, special announcements are excluded, links are preserved, errors are explicitly diagnosed, old sources work as before, and the permitted storage scope and collection are respected.
 
-## 7. Документация и выпуск
+## Open decisions
 
-Обновить README, `examples/portals.yml`, `skill.md`, описание manifest и release notes. В `scripts/health.mjs` добавить явный способ проверить getmatch: текущий default `all` не включает выключенные источники. Автоматическую проверку включать только в согласованном режиме.
-
-В примере оставить getmatch выключенным. Описать недокументированный API, отсутствие обязательной авторизации, исключение спецанонсов, ограничение охвата по страницам и правовое основание использования. Публикацию новой версии выполнять отдельным шагом после проверок и определения условий.
-
-Рекомендуемый порядок работ: уточнение условий → проверка контракта → адаптер и fixtures → конфигурация/сеть/дедупликация → регрессионные и интеграционные проверки → ограниченный dry-run → документация и выпуск. Если условия не подтверждены, результат ограничивается подготовленным кодом и локальными проверками; регулярный сбор и выпуск источника остаются отложенными.
-
-## Выполнено в реализации
-
-- `getmatch` зарегистрирован шестым opt-in источником ru-market; HTTP допускает только `/api/offers`, очередь concurrency 1 / 1000 мс.
-- Подключены конфигурация, URL-нормализация, идентичность по ID и продолжение пустых отфильтрованных страниц. Старые порядки из трёх и пяти источников сохранены.
-- Добавлены синтетический fixture и 11 сценариев getmatch; интеграция проверяет поступление getmatch в pipeline и scan history через настоящий guarded context с подменённым HTTP.
-- Документация: `docs/providers/getmatch.md`; отдельная health-проверка `--source getmatch`, без изменения default health.
-- Живой проход, подтверждение контракта пагинации и основания выпуска не выполнялись. Полные описания не копируются; персональный portals.yml не изменён.
+- Permissibility of automatic reading and storage (agreement clause 3.2, robots.txt closing `/api/`): see Decisions, section 1.
+- Live pagination contract, behaviour of special announcements in `meta.total`, filter values and the timezone of `published_at`: see Decisions, section 2.
+- Whether the `sa`, `pa`, `se`, `l` filters (added later as experimental and unverified, see [provider-architecture-review.md](provider-architecture-review.md)) behave as inferred from client code.
+- Whether the source can be released as ready to use and enabled in scheduled scans or health CI.

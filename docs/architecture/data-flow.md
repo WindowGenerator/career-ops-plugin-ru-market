@@ -1,82 +1,86 @@
-# Архитектура: поток данных
+# Architecture: data flow
 
-Состояние на версию 0.7.0. Связи компонентов: [components.md](components.md).
+Status: Implemented
+Date: 2026-10-10
+Type: architecture
 
-Вакансии попадают в core двумя путями. Оба заканчиваются в общем конвейере `scan.mjs`, где применяются фильтры, проверка доверия и дедуп. Весь внешний текст проходит через `untrusted.mjs` до того, как покинет провайдер.
+State as of version 0.7.0. Component relations: [components.md](components.md).
 
-## Путь 1: провайдер ru-market (API и HTML)
+Vacancies reach core in two ways. Both end in the shared `scan.mjs` pipeline, where filters, the trust check and deduplication are applied. All external text passes through `untrusted.mjs` before it leaves the provider.
+
+## Path 1: the ru-market provider (API and HTML)
 
 ```mermaid
 flowchart TD
-  A["scan.mjs<br/>запись provider: ru-market"] --> B["_engine: ctx.fetch*, settings, allowedHosts"]
+  A["scan.mjs<br/>entry provider: ru-market"] --> B["_engine: ctx.fetch*, settings, allowedHosts"]
   B --> C["index.mjs: parseConfig(entry.ru_market)"]
-  C --> D{"параллельно<br/>Promise.allSettled"}
+  C --> D{"in parallel<br/>Promise.allSettled"}
   D --> E1["habr-career"]
   D --> E2["geekjob"]
   D --> E3["superjob / trudvsem"]
   D --> E4["getmatch / helloworld-rs<br/>(opt-in)"]
-  E1 & E2 & E3 & E4 --> F["paginate: страницы, retry, статусы запросов"]
-  F --> G["разбор ответа<br/>JSON или HTML"]
+  E1 & E2 & E3 & E4 --> F["paginate: pages, retry, request statuses"]
+  F --> G["response parsing<br/>JSON or HTML"]
   G --> H["makeJob"]
-  H --> U["untrusted(): убрать невидимый Unicode,<br/>управляющие символы, HTML-комментарии,<br/>лимиты длины, детект паттернов"]
-  U --> H2["Job: поля + compensation + injectionFlags"]
-  H2 --> L["локальный дедуп source:id"]
-  L --> M["lib/dedup: дедуп между площадками<br/>(union injectionFlags)"]
-  M --> N["массив Job + sourceStatuses + queryStatuses<br/>(injection_flagged)"]
-  D -.->|"все источники упали"| X["SourceError sources-failed"]
+  H --> U["untrusted(): strip invisible Unicode,<br/>control characters, HTML comments,<br/>length limits, pattern detection"]
+  U --> H2["Job: fields + compensation + injectionFlags"]
+  H2 --> L["local dedup source:id"]
+  L --> M["lib/dedup: cross-board dedup<br/>(union of injectionFlags)"]
+  M --> N["array of Job + sourceStatuses + queryStatuses<br/>(injection_flagged)"]
+  D -.->|"all sources failed"| X["SourceError sources-failed"]
   N --> S["scan.mjs"]
   X --> S
 ```
 
-## Путь 2: HH через companion и local-parser
+## Path 2: HH through the companion and local-parser
 
 ```mermaid
 flowchart TD
-  A["scan.mjs<br/>запись HH browser (local-parser)"] --> B["local-parser: execFile<br/>node scripts/ru-market/scan-hh.mjs --config portals.yml --entry 'HH browser' --no-artifacts"]
-  B --> C["loadBatchConfig: блок hh_browser<br/>queries, pages, area, search_field,<br/>excluded_text, professional_role,<br/>only_with_salary, timeout_ms"]
-  C --> D["Playwright, анонимный контекст<br/>hh.ru/search/vacancy, 1 с между страницами"]
-  D --> E{"результат страницы"}
-  E -->|"челлендж или блокировка"| F["статус failed/partial,<br/>частичные вакансии сохраняются"]
-  E -->|"ok"| G["разбор карточек"]
-  G --> U["untrusted() из scripts/ru-market/lib/untrusted.mjs"]
+  A["scan.mjs<br/>entry HH browser (local-parser)"] --> B["local-parser: execFile<br/>node scripts/ru-market/scan-hh.mjs --config portals.yml --entry 'HH browser' --no-artifacts"]
+  B --> C["loadBatchConfig: hh_browser block<br/>queries, pages, area, search_field,<br/>excluded_text, professional_role,<br/>only_with_salary, timeout_ms"]
+  C --> D["Playwright, anonymous context<br/>hh.ru/search/vacancy, 1 s between pages"]
+  D --> E{"page result"}
+  E -->|"challenge or block"| F["status failed/partial,<br/>partial jobs are kept"]
+  E -->|"ok"| G["card parsing"]
+  G --> U["untrusted() from scripts/ru-market/lib/untrusted.mjs"]
   F --> H
-  U --> H["envelope JSON: jobs + sourceStatuses<br/>exit 0 при сбое, ненулевой только для --scan и invalid-config"]
+  U --> H["JSON envelope: jobs + sourceStatuses<br/>exit 0 on failure, non-zero only for --scan and invalid-config"]
   H --> I["stdout"]
-  I --> J["local-parser: parse JSON, белый список полей<br/>title, url, company, location, compensation,<br/>employment, professional_role, injectionFlags, provenance"]
-  J --> K["sourceStatuses: не ok превращается в запись об ошибке<br/>и попадает в итог скана"]
+  I --> J["local-parser: parse JSON, field allowlist<br/>title, url, company, location, compensation,<br/>employment, professional_role, injectionFlags, provenance"]
+  J --> K["sourceStatuses: a non-ok one becomes an error entry<br/>and appears in the scan summary"]
   J --> S["scan.mjs"]
   K --> S
 
-  D -.-> ART["артефакты (без --no-artifacts):<br/>query-XX.json, merged.json,<br/>checkpoint.json, portals-hh.yml"]
-  ART -.->|"--import-cache: повторный разбор без сети"| B
+  D -.-> ART["artifacts (without --no-artifacts):<br/>query-XX.json, merged.json,<br/>checkpoint.json, portals-hh.yml"]
+  ART -.->|"--import-cache: re-parse without network"| B
 ```
 
-## Общий конвейер scan.mjs
+## Shared scan.mjs pipeline
 
 ```mermaid
 flowchart TD
-  IN["Job из любого провайдера"] --> T["buildTrustValidator<br/>trustScore, trustFlags, trustLevel<br/>injectionFlags: флаг prompt-injection-suspected, штраф 30 один раз"]
+  IN["Job from any provider"] --> T["buildTrustValidator<br/>trustScore, trustFlags, trustLevel<br/>injectionFlags: flag prompt-injection-suspected, penalty 30 once"]
   T --> F1["blacklist"]
   F1 --> F2["title_filter"]
-  F2 --> F3["location_filter, возраст, дата"]
-  F3 --> F4["salary_filter: читает compensation и salary min/max"]
-  F4 --> F5["content_filter: по description"]
-  F5 --> F6["country, visa и прочие фильтры"]
-  F6 --> D1["дедуп: URL, затем company::role<br/>против истории, pipeline и этого запуска"]
+  F2 --> F3["location_filter, age, date"]
+  F3 --> F4["salary_filter: reads compensation and salary min/max"]
+  F4 --> F5["content_filter: by description"]
+  F5 --> F6["country, visa and other filters"]
+  F6 --> D1["dedup: URL, then company::role<br/>against history, pipeline and this run"]
   D1 --> OUT["data/pipeline.md<br/>url, company, title, location, comp"]
-  OUT --> LLM["режимы pipeline и scan: LLM читает записи"]
-  LLM --> RAW["режимы открывают URL вакансии<br/>Playwright или WebFetch: сырой текст JD"]
+  OUT --> LLM["pipeline and scan modes: the LLM reads the records"]
+  LLM --> RAW["modes open the vacancy URL<br/>Playwright or WebFetch: raw JD text"]
 ```
 
-## Что где защищено
+## Boundaries: what is protected where
 
-| Этап | Защита | Остаточный риск |
+| Stage | Protection | Residual risk |
 |---|---|---|
-| Выход провайдера (`makeJob`, companion) | `untrusted()` на `title`, `company`, `location`, `note`, `description`. Помеченные вакансии остаются, счётчик `injection_flagged` в статусах. | Паттерны ловят только очевидные атаки. |
-| Проверка доверия core | `injectionFlags` превращается в `prompt-injection-suspected` и штраф 30. Работает только при настроенном `trust_filter`. | При выключенном `trust_filter` поле остаётся на Job без последствий. |
-| `pipeline.md` | Только форматная очистка (`sanitizeMarkdownField`). | Очищенные плагином поля всё равно попадают в контекст LLM. |
-| Сырой JD в режимах core | Только маркер «untrusted» в промптах. | Плагин этот путь не закрывает. Закрывается отдельным upstream-предложением (приложение в roadmap). |
+| Provider output (`makeJob`, companion) | `untrusted()` on `title`, `company`, `location`, `note`, `description`. Flagged vacancies stay; the counter `injection_flagged` is in the statuses. | Patterns catch only obvious attacks. |
+| Core trust check | `injectionFlags` becomes `prompt-injection-suspected` and a penalty of 30. Works only with a configured `trust_filter`. | With `trust_filter` off the field stays on the Job with no consequences. |
+| `pipeline.md` | Format cleaning only (`sanitizeMarkdownField`). | Fields cleaned by the plugin still reach the LLM context. |
+| Raw JD in core modes | Only an "untrusted" marker in the prompts. | The plugin does not close this path. It is closed by a separate upstream proposal (appendix in the roadmap). |
 
-## Дубликаты между путями
+## Duplicates between paths
 
-Путь 1 и путь 2 это разные записи `portals.yml`, core обрабатывает их параллельно (`CONCURRENCY = 10`). Дубликат определяется по URL, затем по `company::role` с учётом `company_aliases`, победителем остаётся запись, завершившаяся первой. Чтобы данные HH побеждали гарантированно, запускайте HH отдельным сканированием раньше (`--company "HH browser"`).
+Path 1 and path 2 are different `portals.yml` entries, and core processes them in parallel (`CONCURRENCY = 10`). A duplicate is detected by URL, then by `company::role` with `company_aliases` taken into account, and the winner is the entry that finished first. To make HH data win for certain, run HH as a separate scan earlier (`--company "HH browser"`).

@@ -1,54 +1,73 @@
-# Исследование: вакансии Яндекса
+# Research: Yandex vacancies
 
-Дата проверки: 7 октября 2026 года.
+Status: Reference
+Date: 2026-10-07
+Type: research
 
-Результат: документированный публичный API вакансий не найден; публичные страницы доступны для чтения через веб-инструмент. Playwright-проверка не выполнена из-за отсутствия подключённого браузера. Соответствие автоматического сбора условиям площадки не подтверждено: для российского карьерного сайта обнаружено ограничение на использование контента вне его функционала. Источник в плагин не добавляется, план реализации пока не составляется.
+## Question
 
-## Что это за источник
+Can vacancies from Yandex's career site be added as a source, technically and under its published terms? Checked on 7 October 2026.
 
-[yandex.com/jobs](https://yandex.com/jobs) — карьерный сайт Яндекса с вакансиями его компаний, а не общая доска вакансий разных работодателей. Публичная выдача доступна на [английском](https://yandex.com/jobs/vacancies) и [русском](https://yandex.ru/jobs/vacancies?text=Python). Видимый интерфейс позволяет читать каталог без входа; авторизация предлагается отдельно для отклика. Наличие публичного каталога не устанавливает устройство внутренней ATS.
+## Findings
 
-Для русского рынка имеет смысл исследовать `yandex.ru/jobs`: выдача `.com` отличается языком и содержит международные позиции. Одинаковую полноту каталогов, эквивалентность карточек и связь их идентификаторов не проверяли.
+Result: no documented public vacancy API was found; public pages can be read through a web tool. The Playwright check was not performed because no browser was attached. Compliance of automated collection with the platform terms is not confirmed: for the Russian career site a restriction on using content outside its functionality was found.
 
-## API
+### What this source is
 
-Проверены публичные страницы и поисковые запросы о Yandex Jobs API и API вакансий на доменах Яндекса. Документация, поддерживаемый endpoint каталога, схема ответа и лицензия на API вакансий не найдены. Это результат ограниченного поиска, а не доказательство отсутствия API.
+[yandex.com/jobs](https://yandex.com/jobs) is Yandex's career site with vacancies of its companies, not a general board of vacancies from different employers. The public listing is available in [English](https://yandex.com/jobs/vacancies) and [Russian](https://yandex.ru/jobs/vacancies?text=Python). The visible interface allows reading the catalogue without login; authorization is offered separately for applying. A public catalogue does not establish how the internal ATS works.
 
-Встречающиеся DataSphere Jobs API и Search API относятся к другим продуктам и не подтверждают наличие API карьерного каталога. Запросы XHR/fetch интерфейса не исследованы: браузер не подключён. Неизвестный внутренний JSON-endpoint, даже если он доступен без ключа, нельзя автоматически считать открытым и разрешённым API.
+For the Russian market it makes sense to study `yandex.ru/jobs`: the `.com` listing differs in language and contains international positions. Equal catalogue completeness, equivalence of cards and the relation between their identifiers were not checked.
 
-## Доступность страниц и возможность парсинга
+### API
 
-Веб-инструмент прочитал главную страницу, каталог `.com`, русскую выдачу по `text=Python` и [английскую карточку SRE](https://yandex.com/jobs/vacancies/site-reliability-engineer-ydb-8260). Это подтверждает доступность текста для данного инструмента, но не доказывает наличие полного каталога в исходном HTML обычного HTTP-ответа: инструмент мог выполнить рендеринг или использовать индекс.
+Public pages and search queries about a Yandex Jobs API and a vacancy API on Yandex domains were checked. No documentation, supported catalogue endpoint, response schema or licence for a vacancy API was found. This is the result of a limited search, not proof that no API exists.
 
-Наблюдения по выдаче:
+The DataSphere Jobs API and Search API that turn up belong to other products and do not confirm a career catalogue API. XHR/fetch requests of the interface were not studied: no browser was attached. An unknown internal JSON endpoint, even if reachable without a key, must not automatically be considered an open and permitted API.
 
-- Есть ссылки на отдельные карточки, названия, команды, краткие описания, города, форматы работы и навыки.
-- `text=Python` используется как параметр текстового поиска. В ссылках сайта встречаются также `work_modes`, `services`, `skills` и `pro_levels`; полный набор значений и сочетания фильтров не проверены.
-- Пример пути карточки: `/jobs/vacancies/site-reliability-engineer-ydb-8260`. Есть и карточки с кириллическим slug. Полный контракт путей и стабильность числового суффикса не установлены.
-- В русской выдаче присутствует «Показать ещё». Механизм загрузки, cursor/offset, размер порции и условие конца выдачи не установлены. Нельзя обещать сбор всех вакансий по первой странице.
-- Даты публикации и зарплаты не подтверждены как универсальные поля. Не выводить их из давности поискового индекса, даты проверки или общих бенефитов.
+### Page availability and parsing
 
-Попытка подключить браузер через навык `browser:control-in-app-browser` завершилась сообщением `No browser is available`; список доступных браузеров пуст. Локальные пакеты `playwright` и `puppeteer` также отсутствуют. DOM-селекторы, сетевые ответы и работа кнопки «Показать ещё» через Playwright не проверены; готовый парсер не создан.
+The web tool read the main page, the `.com` catalogue, the Russian listing for `text=Python` and the [English SRE card](https://yandex.com/jobs/vacancies/site-reliability-engineer-ydb-8260). This confirms that the text is available to that tool, but does not prove that the full catalogue is present in the source HTML of an ordinary HTTP response: the tool may have rendered the page or used an index.
 
-## Условия использования
+Observations on the listing:
 
-Найдено специальное [пользовательское соглашение карьерного сайта](https://yandex.ru/legal/yandex_job_rules/ru/), опубликованное 30 марта 2026 года. Оно прямо называет `https://yandex.ru/jobs` и распространяет принятие условий на доступ к контенту, а не только на отправку отклика.
+- There are links to individual cards, titles, teams, short descriptions, cities, work formats and skills.
+- `text=Python` is used as the text search parameter. Site links also contain `work_modes`, `services`, `skills` and `pro_levels`; the full set of values and filter combinations were not checked.
+- An example card path: `/jobs/vacancies/site-reliability-engineer-ydb-8260`. There are also cards with a Cyrillic slug. The full path contract and the stability of the numeric suffix are not established.
+- The Russian listing has a `Показать ещё` ("Show more") control. The loading mechanism, cursor/offset, chunk size and end-of-list condition are not established. Collecting all vacancies from the first page cannot be promised.
+- Publication dates and salaries are not confirmed as universal fields. Do not derive them from the age of the search index, the check date or general benefits.
 
-Пункт 2.3 ограничивает использование контента функциями сайта; другие способы требуют предварительного письменного разрешения компании или правообладателя. Пункт 4.3 запрещает действия, нарушающие нормальную работу сайта. В тексте не обнаружен отдельный прямой запрет, названный «парсингом», но это не отменяет ограничения пункта 2.3.
+An attempt to attach a browser through the `browser:control-in-app-browser` skill ended with the message `No browser is available`; the list of available browsers is empty. Local `playwright` and `puppeteer` packages are also absent. DOM selectors, network responses and the operation of the `Показать ещё` button via Playwright were not checked; no ready parser was created.
 
-Моя оценка для плагина: автоматическое извлечение и сохранение карточек в стороннем приложении может выходить за разрешённый функционал. Оснований заявить, что такой сценарий разрешён, недостаточно. Это оценка условий площадки, а не окончательное заключение о законности любого способа чтения данных. Вопросы авторских прав, прав на базу данных и возможных исключений требуют отдельной оценки конкретного сценария.
+### Terms of use
 
-Соглашение прямо относится к `.ru`. Применимость того же документа к `.com` отдельно не установлена; попытка открыть `https://yandex.com/legal/yandex_job_rules/` не дала документа. Переключение домена само по себе не подтверждает разрешение.
+A dedicated [user agreement of the career site](https://yandex.ru/legal/yandex_job_rules/ru/) was found, published on 30 March 2026. It explicitly names `https://yandex.ru/jobs` and extends acceptance of the terms to access to content, not only to submitting an application.
 
-[robots.txt `.ru`](https://yandex.ru/robots.txt) в группе `User-agent: *` содержит запрет `/jobs/skill-diagnostic/private/*`; общего запрета публичного `/jobs/vacancies` не обнаружено. В [robots.txt `.com`](https://yandex.com/robots.txt) правило с `jobs` не найдено. Это инструкции обхода, а не лицензия на извлечение и повторное использование контента. Для будущего конкретного API-пути потребуется отдельная проверка.
+Clause 2.3 restricts use of content to the site's functions; other ways require prior written permission of the company or the right holder. Clause 4.3 prohibits actions that disrupt normal operation of the site. No separate direct prohibition called "parsing" was found in the text, but this does not cancel the restriction of clause 2.3.
 
-## Что нужно для возвращения к интеграции
+My assessment for the plugin: automatic extraction and storage of cards in a third-party application may go beyond the permitted functionality. There are not enough grounds to claim that such a scenario is permitted. This is an assessment of the platform terms, not a final conclusion on the lawfulness of any way of reading the data. Questions of copyright, database rights and possible exceptions need a separate assessment of the specific scenario.
 
-По условию задачи план добавления составляется после подтверждения допустимости использования. Сейчас этот критерий не выполнен.
+The agreement explicitly refers to `.ru`. Applicability of the same document to `.com` is not established separately; an attempt to open `https://yandex.com/legal/yandex_job_rules/` did not return a document. Switching the domain does not by itself confirm permission.
 
-1. Уточнить у владельца через [официальную обратную связь](https://yandex.ru/jobs/vacancies?text=Python), на которую есть ссылка в футере, наличие API/фида и разрешение на периодическое чтение для личного поиска. Отдельно уточнить допустимые поля, локальное хранение, публичное распространение плагина и лимиты. Сообщение владельцу в рамках этого исследования не отправлялось.
-2. Получить письменное разрешение либо официальные условия API, допускающие требуемый сценарий, и определить применимые домены.
-3. После этого выполнить ограниченную браузерную проверку поиска и «Показать ещё»: установить публичный endpoint или DOM-маршрут, пагинацию, поля, обработку пустой выдачи и удалённых вакансий. Не обращаться к откликам и профилям кандидатов.
-4. На основании подтверждённого контракта составить отдельный план адаптера с явным включением источника, совместимостью порядков из трёх и пяти источников, ограниченными хостами/путями, очередью запросов, дедупликацией и проверками частичных ошибок. Предпочтение API или обычному HTML определить по результату проверки; необходимость браузера в runtime пока не установлена.
+[robots.txt for `.ru`](https://yandex.ru/robots.txt) contains, in the `User-agent: *` group, a ban on `/jobs/skill-diagnostic/private/*`; no general ban on the public `/jobs/vacancies` was found. No rule with `jobs` was found in [robots.txt for `.com`](https://yandex.com/robots.txt). These are crawling instructions, not a licence to extract and reuse content. A future specific API path will need a separate check.
 
-Текущая реализация, `allowedHosts`, примеры конфигурации и релизная версия плагина не меняются.
+### What is needed to return to integration
+
+By the task condition, a plan for adding the source is written after the permissibility of use is confirmed. That criterion is not met now.
+
+1. Ask the owner, through the [official feedback](https://yandex.ru/jobs/vacancies?text=Python) linked in the footer, whether an API/feed exists and whether periodic reading for personal search is permitted. Separately clarify permitted fields, local storage, public distribution of the plugin and limits. No message to the owner was sent as part of this research.
+2. Obtain written permission or official API terms that allow the required scenario, and determine the applicable domains.
+3. After that, perform a bounded browser check of search and `Показать ещё`: establish the public endpoint or DOM route, pagination, fields, handling of empty results and removed vacancies. Do not touch applications and candidate profiles.
+4. On the basis of the confirmed contract, write a separate adapter plan with explicit enabling of the source, compatibility of orders of three and five sources, bounded hosts/paths, a request queue, deduplication and partial-error checks. Whether to prefer the API or ordinary HTML is decided by the check result; the need for a browser in the runtime is not established yet.
+
+The current implementation, `allowedHosts`, configuration examples and the release version of the plugin do not change.
+
+## Sources
+
+- [yandex.com/jobs](https://yandex.com/jobs), [English listing](https://yandex.com/jobs/vacancies), [Russian listing](https://yandex.ru/jobs/vacancies?text=Python)
+- [English SRE card](https://yandex.com/jobs/vacancies/site-reliability-engineer-ydb-8260)
+- [Career site user agreement](https://yandex.ru/legal/yandex_job_rules/ru/)
+- [robots.txt .ru](https://yandex.ru/robots.txt), [robots.txt .com](https://yandex.com/robots.txt)
+
+## Conclusion
+
+The source is not added to the plugin and no implementation plan is written until the owner confirms permitted use (API/feed or written permission). Technical readability of public pages is established only through a web tool; the browser-level contract (DOM, XHR, pagination) is unverified.

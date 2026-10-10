@@ -1,6 +1,6 @@
 # HH browser entry for portals.yml (companion installed by install.sh). Paths resolve against career-ops Data Root.
 # The hh_browser block is re-read on every run: edit it here, no reinstall needed.
-# core runs entries in parallel, so file order does not decide cross-entry duplicates; see README, "Дубликаты между записями".
+# core runs entries in parallel, so file order does not decide cross-entry duplicates; see README, "Duplicates between entries".
 company_aliases:            # canonical name: [aliases]; lets company+role dedup match "Yandex" and "Яндекс"
   Яндекс: [Yandex, ООО Яндекс]
 job_boards:

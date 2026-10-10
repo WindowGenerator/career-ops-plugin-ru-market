@@ -1,104 +1,114 @@
-# HelloWorld.rs: представление вакансий и общий контракт
+# HelloWorld.rs: vacancy presentation and the shared contract
 
-Проверено 2026-10-09. Это исследование и предложения для плана, не реализованный адаптер. Принятый продуктовый объём: настраиваемые поисковые фразы, поля выдачи без загрузки полных описаний, вакансии Сербии и доступная из Сербии удалёнка; неопределённая география сохраняется как неизвестная.
+Status: Reference
+Date: 2026-10-09
+Type: research
 
-## Проверенные первичные источники
+## Question
 
-| Источник | Наблюдение |
+How does HelloWorld.rs present vacancies, and how do they map to the shared `Job` contract of the plugin and core? Checked on 2026-10-09. This is research and input for a plan, not an implemented adapter. Accepted product scope: configurable search phrases, listing fields without loading full descriptions, Serbian vacancies and remote work available from Serbia; unknown geography is kept as unknown.
+
+References to `career-ops/...` paths below point to the read-only sibling core checkout, not to files of this repository.
+
+## Findings
+
+### Verified primary sources
+
+| Source | Observation |
 | --- | --- |
-| [Python-выдача](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0) | Прямой HTTP 200, полноценный HTML, 56 результатов, 30 карточек на первой странице. Это технологический фильтр `tag=69`, не произвольный keyword query. |
-| [Вторая страница](https://www.helloworld.rs/oglasi-za-posao/stranica/30?tag=69&disable_saved_search=0) | HTTP 200, 26 карточек. Следующая страница задаётся смещением 30; ссылка присутствует в `rel=next`. |
-| [Поиск Data Engineer](https://www.helloworld.rs/oglasi-za-posao?q=Data%20Engineer) | HTTP 200, 96 результатов; следующий URL сохраняет `q`. Название вакансии не обязано содержать точную фразу. |
-| [Выдача с зарплатой](https://www.helloworld.rs/oglasi-za-posao?salary=on) | HTTP 200, реальные суммы EUR/USD с разделителями `2.600,00`, пометками `(net)` / `(gross)`, без периода оплаты в карточке. |
-| [Data Engineer, Bel-Dev, 760224](https://www.helloworld.rs/posao/Data-Engineer/Bel-Dev-d.o.o/760224) | HTTP 200; проверена только для установления семантики даты. В выдаче `25.10.2026.`, JSON-LD карточки содержит `datePosted=2026-10-07`, `validThrough=2026-10-26T00:00:00`. |
-| [robots.txt](https://www.helloworld.rs/robots.txt) | HTTP 200; `/oglasi-za-posao` и `/posao` не запрещены, `/auth/` и `/konkurs/` запрещены. |
+| [Python listing](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0) | Direct HTTP 200, full HTML, 56 results, 30 cards on the first page. This is the technology filter `tag=69`, not an arbitrary keyword query. |
+| [Second page](https://www.helloworld.rs/oglasi-za-posao/stranica/30?tag=69&disable_saved_search=0) | HTTP 200, 26 cards. The next page is set by offset 30; the link is present in `rel=next`. |
+| [Data Engineer search](https://www.helloworld.rs/oglasi-za-posao?q=Data%20Engineer) | HTTP 200, 96 results; the next URL keeps `q`. A vacancy title need not contain the exact phrase. |
+| [Listing with salary](https://www.helloworld.rs/oglasi-za-posao?salary=on) | HTTP 200, real EUR/USD amounts with separators such as `2.600,00`, marked `(net)` / `(gross)`, with no pay period on the card. |
+| [Data Engineer, Bel-Dev, 760224](https://www.helloworld.rs/posao/Data-Engineer/Bel-Dev-d.o.o/760224) | HTTP 200; checked only to establish date semantics. The listing shows `25.10.2026.`, the card JSON-LD contains `datePosted=2026-10-07`, `validThrough=2026-10-26T00:00:00`. |
+| [robots.txt](https://www.helloworld.rs/robots.txt) | HTTP 200; `/oglasi-za-posao` and `/posao` are not disallowed, `/auth/` and `/konkurs/` are disallowed. |
 
-Числа результатов — снимок проверки, не гарантия будущего объёма. Сначала web-инструмент возвращал Python-выдачу из старого индекса; приведённые выше числа получены прямым HTTP-запросом. Первоначальная ошибка DNS возникла в ограниченной сетевой среде; после разрешённого сетевого доступа запросы прошли. JavaScript/browser для проверенных страниц выдачи не требуется.
+Result counts are a snapshot of the check, not a guarantee of future volume. At first the web tool returned the Python listing from an old index; the numbers above were obtained by a direct HTTP request. The initial DNS error occurred in a restricted network environment; after network access was permitted the requests succeeded. JavaScript or a browser is not required for the verified listing pages.
 
-## Что действительно лежит в карточке выдачи
+### What the listing card actually contains
 
-Проверены разные записи первой и второй Python-страницы и keyword-выдачи:
+Different records from the first and second Python pages and from the keyword listing were checked:
 
-| Пример | Видимое место / режим | Уровень и технологии |
+| Example | Visible place / mode | Seniority and technologies |
 | --- | --- | --- |
-| Data Engineer — Bel-Dev | `Beograd | Hibrid` | `Senior`; SQL, Python, Batch, Kubernetes |
-| Data Platform Engineer (DataOps) — Keba | `Novi Sad` | `Intermediate`; SQL, Git, Python, Docker |
-| Associate Development Operations Engineer — Clarivate | `Beograd | Hibrid` | `Junior`; Linux, Git, Python и другие теги |
-| Application Security Engineer — CCBill | `Rad od kuće` | `Intermediate`; .NET, C#, JavaScript и другие теги |
-| Founding GPU Engineer — Fuse Energy | `Remote` | `Senior`; Node, C++, Python, C, CUDA |
-| Data Scientist GenAI — Madiff | `Inostranstvo, Inostranstvo | Rad od kuće` | `Intermediate`; Python, R |
+| Data Engineer, Bel-Dev | `Beograd | Hibrid` | `Senior`; SQL, Python, Batch, Kubernetes |
+| Data Platform Engineer (DataOps), Keba | `Novi Sad` | `Intermediate`; SQL, Git, Python, Docker |
+| Associate Development Operations Engineer, Clarivate | `Beograd | Hibrid` | `Junior`; Linux, Git, Python and other tags |
+| Application Security Engineer, CCBill | `Rad od kuće` | `Intermediate`; .NET, C#, JavaScript and other tags |
+| Founding GPU Engineer, Fuse Energy | `Remote` | `Senior`; Node, C++, Python, C, CUDA |
+| Data Scientist GenAI, Madiff | `Inostranstvo, Inostranstvo | Rad od kuće` | `Intermediate`; Python, R |
 
-Источники таблицы: [первая страница](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0), [вторая страница](https://www.helloworld.rs/oglasi-za-posao/stranica/30?tag=69&disable_saved_search=0). `Inostranstvo` означает заграницу, а не перечень разрешённых стран. Повторение слова — наблюдаемая особенность данных. Достоверного примера двух разных именованных городов в проверенной выборке не найдено: разделять произвольную строку по каждой запятой пока нельзя.
+Table sources: [first page](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0), [second page](https://www.helloworld.rs/oglasi-za-posao/stranica/30?tag=69&disable_saved_search=0). `Inostranstvo` means abroad, not a list of permitted countries. The repeated word is an observed feature of the data. No reliable example of two different named cities was found in the checked sample: an arbitrary string cannot yet be split at every comma.
 
-В HTML ссылки заголовков отмечены `__ga4_job_title` и `data-job-id`; работодатель — `h4`, иногда без ссылки. Место находится рядом с `la-map-marker`, дата — с `la-clock`, зарплата — с `la-coins`; технологии имеют класс `jobtag`. Рейтинги компаний, льготы и рекламные элементы расположены рядом, но не являются полями зарплаты или описанием работы. Эти селекторы — наблюдение текущей [выдачи](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0), не публичный API-контракт.
+In the HTML, title links are marked `__ga4_job_title` and `data-job-id`; the employer is an `h4`, sometimes without a link. The place is next to `la-map-marker`, the date next to `la-clock`, the salary next to `la-coins`; technologies have the class `jobtag`. Company ratings, benefits and promotional elements are nearby but are not salary fields or a job description. These selectors are an observation of the current [listing](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0), not a public API contract.
 
-В форме существуют фильтры `workplace[]=office|remote|hybrid`, `senioritet[]=1|2|3`, `city`, `vreme_postavljanja=today|2|3|7`. Их наличие проверено в HTML; поведение всех комбинаций не проверено. Город без явной метки режима сам по себе не доказывает офис: пример Keba следует нормализовать с `workArrangement=unknown`, пока отдельное наблюдаемое поле не подтверждает `onsite`. [Источник](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0).
+The form has filters `workplace[]=office|remote|hybrid`, `senioritet[]=1|2|3`, `city`, `vreme_postavljanja=today|2|3|7`. Their presence was verified in the HTML; the behaviour of all combinations was not. A city without an explicit mode label does not by itself prove office work: the Keba example should be normalized with `workArrangement=unknown` until a separate observable field confirms `onsite`. [Source](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0).
 
-## Предлагаемое отображение в существующий Job
+### Proposed mapping to the existing Job
 
-Общий конструктор уже предоставляет большую часть нужных полей: [lib/normalize.mjs](../../lib/normalize.mjs). Предлагается использовать его, добавив только правила HelloWorld; переписывать остальные адаптеры не требуется.
+The shared constructor already provides most of the needed fields: [lib/normalize.mjs](../../lib/normalize.mjs). The proposal is to use it, adding only HelloWorld rules; rewriting the other adapters is not required.
 
-| Данные источника | Поле Job | Правило / ограничение |
+| Source data | Job field | Rule / limitation |
 | --- | --- | --- |
-| Заголовок и работодатель | `title`, `company` | Текст конкретной карточки; не добавлять рейтинг к имени. |
-| `/posao/<title>/<company>/<id>` | `url`, `sourceId` | HTTPS, проверенные host/path, убрать query/fragment; числовой ID из пути сверить с `data-job-id`. |
-| Источник | `source`, `transport`, `note` | Предложение: `helloworld-rs`, `html`, начало note `source: helloworld-rs`. YAML-ключ может быть `helloworld_rs`. |
-| Оригинальная строка места | `locationText` | Сохранить исходный текст, включая обозначение режима. |
-| Место для существующего интерфейса | `location` | Понятная строка с явным `Hybrid` / `Remote`, поскольку старые фильтры читают именно строку. |
-| Отдельные известные места | `locations` | Только подтверждённые подписи; `Remote` не превращать в город или страну. Для строки только про режим допустим пустой массив. |
-| `Hibrid`, `Rad od kuće`, `Remote` | `workArrangement` | Соответственно `hybrid`, `remote`, `remote`; `onsite` только при явном подтверждении, иначе `unknown`. |
-| Дата у часов | Не `postedAt` | Проверенный пример показывает срок объявления, не публикацию. В listing-only v1 `postedAt` отсутствует. |
-| Отсутствующее описание | `hasDescription=false`, `dataLevel=listing` | `description` отсутствует; не подставлять технологии вместо описания. |
-| Зарплата объявления | `compensation` | Явные сумма, валюта, net/gross, исходный текст; неизвестный период не угадывать. |
-| Найденная поисковая фраза | `matchedQueries` | Уже формируется общим [paginate](../../lib/paginate.mjs), совпадения запросов объединяет [dedup](../../lib/dedup.mjs). |
-| Доступность из Сербии | `eligibility.status=unknown` | Текущий контракт поддерживает только unknown; Remote и сербский сайт сами по себе не подтверждают право работать из Сербии. |
-| Seniority и технологии | Общие необязательные списки | Шкала уровня `intern / entry / mid / senior`, все явные уровни/технологии и исходные метки сохраняются. Фильтрация — отдельный этап core. |
+| Title and employer | `title`, `company` | Text of the specific card; do not append a rating to the name. |
+| `/posao/<title>/<company>/<id>` | `url`, `sourceId` | HTTPS, verified host/path, strip query/fragment; check the numeric ID from the path against `data-job-id`. |
+| Source | `source`, `transport`, `note` | Proposal: `helloworld-rs`, `html`, note starting with `source: helloworld-rs`. The YAML key may be `helloworld_rs`. |
+| Original place string | `locationText` | Keep the source text, including the mode label. |
+| Place for the existing interface | `location` | A readable string with explicit `Hybrid` / `Remote`, because old filters read exactly this string. |
+| Individual known places | `locations` | Only confirmed labels; do not turn `Remote` into a city or country. An empty array is acceptable for a mode-only string. |
+| `Hibrid`, `Rad od kuće`, `Remote` | `workArrangement` | `hybrid`, `remote`, `remote` respectively; `onsite` only with explicit confirmation, otherwise `unknown`. |
+| Date next to the clock | Not `postedAt` | The verified example shows the listing expiry, not publication. In listing-only v1 `postedAt` is absent. |
+| Missing description | `hasDescription=false`, `dataLevel=listing` | `description` absent; do not substitute technologies for a description. |
+| Listing salary | `compensation` | Explicit amount, currency, net/gross, source text; do not guess an unknown period. |
+| Matched search phrase | `matchedQueries` | Already produced by the shared [paginate](../../lib/paginate.mjs); query matches are merged by [dedup](../../lib/dedup.mjs). |
+| Eligibility from Serbia | `eligibility.status=unknown` | The current contract supports only unknown; Remote and a Serbian site do not by themselves confirm the right to work from Serbia. |
+| Seniority and technologies | Shared optional lists | Level scale `intern / entry / mid / senior`; all explicit levels/technologies and source labels are kept. Filtering is a separate core stage. |
 
-`helloworld-rs` согласован с текущим извлечением source через `[a-z-]+`: underscore в source ID был бы обрезан. [lib/dedup.mjs](../../lib/dedup.mjs).
+`helloworld-rs` matches the current extraction of source via `[a-z-]+`: an underscore in the source ID would be truncated. See [lib/dedup.mjs](../../lib/dedup.mjs).
 
-Географический отбор и юридическая/договорная eligibility — разные вещи. Для v1 можно сохранять объявления с сербскими местами, с явным разрешением Сербии и с неизвестной remote-географией; исключать только явно несовместимые ограничения. В проверенной выдаче нет достаточной информации для подтверждения разрешённой Сербии у generic Remote. Сохранение неизвестных записей — принятое продуктовое решение, а не подтверждение доступности. Не выполнять скрытые запросы карточек ради его изменения.
+Geographic selection and legal/contractual eligibility are different things. For v1, listings with Serbian places, with explicit permission for Serbia and with unknown remote geography may be kept; only explicitly incompatible restrictions are excluded. The checked listing has too little information to confirm that Serbia is permitted for a generic Remote. Keeping unknown records is an accepted product decision, not confirmation of availability. Do not make hidden card requests to change this.
 
-## Зарплата: единицы важнее наличия числа
+### Salary: units matter more than having a number
 
-Наблюдения одной [salary-выдачи](https://www.helloworld.rs/oglasi-za-posao?salary=on):
+Observations from one [salary listing](https://www.helloworld.rs/oglasi-za-posao?salary=on):
 
-| Видимый текст | Корректные числа | Налоговая база | Период |
+| Visible text | Correct numbers | Tax basis | Period |
 | --- | --- | --- | --- |
-| `2.600,00 - 2.700,00 EUR (net)` | 2600–2700 EUR | net | unknown |
-| `14,00 - 18,00 EUR (net)` | 14–18 EUR | net | unknown |
-| `48.000,00 - 90.000,00 USD (gross)` | 48000–90000 USD | gross | unknown |
-| `120,00 - 200,00 USD (gross)` | 120–200 USD | gross | unknown |
+| `2.600,00 - 2.700,00 EUR (net)` | 2600-2700 EUR | net | unknown |
+| `14,00 - 18,00 EUR (net)` | 14-18 EUR | net | unknown |
+| `48.000,00 - 90.000,00 USD (gross)` | 48000-90000 USD | gross | unknown |
+| `120,00 - 200,00 USD (gross)` | 120-200 USD | gross | unknown |
 
-Масштаб суммы не доказывает месяц/час/год. В этих карточках период не отображается; в первой дополнительно проверен окружающий HTML. Встречающееся в аналитическом JavaScript `price:1, currency:RSD` описывает commerce-событие и не является зарплатой. RSD-зарплата вакансии в проверенной выборке не найдена.
+The magnitude of an amount does not prove month/hour/year. These cards show no period; for the first one the surrounding HTML was additionally checked. The `price:1, currency:RSD` seen in analytics JavaScript describes a commerce event and is not a salary. No RSD vacancy salary was found in the checked sample.
 
-Текущие [parseSalary](../../lib/normalize.mjs) и [parseCompensation](../../lib/compensation.mjs) не рассчитаны на `2.600,00` и RSD. Минимальное изменение — небольшой парсер формата источника с выходом в существующий `normalizeCompensation`, без смены общих единиц и валютных конвертаций. Неподдерживаемый/неоднозначный формат сохранять как `rawText`, без выдуманных чисел. Legacy `salary` при необходимости формировать из тех же чисел, но downstream должен получать `compensation` с `period=unknown`.
+The current [parseSalary](../../lib/normalize.mjs) and [parseCompensation](../../lib/compensation.mjs) are not designed for `2.600,00` and RSD. The minimal change is a small parser for the source format feeding the existing `normalizeCompensation`, without changing common units or currency conversions. Keep an unsupported or ambiguous format as `rawText`, with no invented numbers. The legacy `salary` may be derived from the same numbers if needed, but downstream must receive `compensation` with `period=unknown`.
 
-## Что сохраняется в core, а что ещё не поддержано
+### What core preserves and what it does not yet support
 
-Проверен текущий соседний checkout core и поставляемый [companion/core-contract.patch](../../companion/core-contract.patch), а не обещание совместимости с любой upstream-версией.
+The current sibling core checkout and the shipped [companion/core-contract.patch](../../companion/core-contract.patch) were checked, not a promise of compatibility with any upstream version.
 
-- Прямой plugin-provider передаёт результат `hook.fetch` без проекции полей: [core plugins/_engine.mjs](../../career-ops/plugins/_engine.mjs). Неизвестные поля могут дойти до scan, но это не создаёт фильтрацию или сохранение в интерфейсе.
-- Patched [core local-parser](../../career-ops/providers/local-parser.mjs) явно пропускает `locationText`, `locations`, `workArrangement`, `sourceId`, `compensation`, `matchedQueries`, `hasDescription`, `dataLevel`; `eligibility` пропускается только со статусом `unknown`. Top-level `seniority`, `skills` или `tags` в allowlist отсутствуют и будут потеряны на этом пути. Это же видно в [поставляемом patch](../../companion/core-contract.patch).
-- В [core scan.mjs](../../career-ops/scan.mjs) location-фильтр читает `job.location`, country-eligibility — `job.description`, salary — `job.salary` вместе с `job.compensation`. Одного нового структурного поля недостаточно для изменения отбора. Нет основания утверждать, что технологии из карточки уже участвуют в content-фильтрах.
-- Общий `makeJob` пока не копирует seniority/skills из входа. Простого добавления их в вызов недостаточно. [lib/normalize.mjs](../../lib/normalize.mjs).
+- The direct plugin provider passes the `hook.fetch` result without field projection: core `plugins/_engine.mjs`. Unknown fields may reach scan, but this creates no filtering or interface storage.
+- The patched core `providers/local-parser.mjs` explicitly passes `locationText`, `locations`, `workArrangement`, `sourceId`, `compensation`, `matchedQueries`, `hasDescription`, `dataLevel`; `eligibility` is passed only with status `unknown`. Top-level `seniority`, `skills` or `tags` are absent from the allowlist and are lost on this path. The same is visible in the [shipped patch](../../companion/core-contract.patch).
+- In core `scan.mjs` the location filter reads `job.location`, country eligibility reads `job.description`, salary reads `job.salary` together with `job.compensation`. One new structural field is not enough to change selection. There is no basis to claim that card technologies already take part in content filters.
+- The shared `makeJob` does not yet copy seniority/skills from its input. Simply adding them to the call is not enough. See [lib/normalize.mjs](../../lib/normalize.mjs).
 
-Уточнение существующей фильтрации core: настройки уже есть, но они работают с текстом, а не с отдельными тегами источника.
+Clarification of existing core filtering: the settings exist, but they work on text, not on separate source tags.
 
-| Настройка `portals.yml` | Что читает сейчас | Значение для HelloWorld |
+| `portals.yml` setting | What it reads now | Meaning for HelloWorld |
 | --- | --- | --- |
-| `skip_tiers: [intern, entry]` | `classifyTier(job.title)`; категории `intern`, `entry`, `mid`, `senior` | Отсеет Junior в заголовке, но не отдельный Junior badge у обычного заголовка. Неизвестный уровень заголовка классификатор относит к `mid`. |
-| `title_filter.positive` / `.negative` | `job.title` | Может искать Python в названии, но не в технологии карточки. |
-| `content_filter.positive` / `.negative`, необязательный `by_title_keyword` | `job.description`, с выбором правила по совпадению заголовка | Без описания запись проходит этот фильтр, даже если positive задан. В listing-only v1 не фильтрует technology badges. |
+| `skip_tiers: [intern, entry]` | `classifyTier(job.title)`; categories `intern`, `entry`, `mid`, `senior` | Filters out Junior in the title, but not a separate Junior badge next to an ordinary title. The classifier assigns an unknown title level to `mid`. |
+| `title_filter.positive` / `.negative` | `job.title` | Can look for Python in the title, but not in the card technology. |
+| `content_filter.positive` / `.negative`, optional `by_title_keyword` | `job.description`, with the rule chosen by title match | Without a description the record passes this filter even if positive is set. In listing-only v1 it does not filter technology badges. |
 
-Проверено в [scan: чтение config и создание фильтров](../../career-ops/scan.mjs) (`3396–3417`), там же применение `classifyTier(job.title)` (`3647`) и `contentFilter(job.description, …)` (`3669`), [buildContentFilter](../../career-ops/scan.mjs) (`753`, пропуск пустого описания `769`), [title-keywords](../../career-ops/title-keywords.mjs) (`218`) и [classify-tier](../../career-ops/classify-tier.mjs) (`28`). Название настройки — `skip_tiers`; `tiers_classifier` в проверенном коде/конфигурации не найдено. Поведение обычного `Software Engineer → mid` закреплено в [classify-tier-position.test.mjs](../../career-ops/tests/classify-tier-position.test.mjs); текстовые positive/negative и пропуск отсутствующего описания — в [content-filter-word-prefix.test.mjs](../../career-ops/tests/content-filter-word-prefix.test.mjs).
+Verified in core `scan.mjs` (config reading and filter creation at `3396-3417`, application of `classifyTier(job.title)` at `3647` and `contentFilter(job.description, ...)` at `3669`, `buildContentFilter` at `753` with the empty-description skip at `769`), `title-keywords.mjs` (`218`) and `classify-tier.mjs` (`28`). The setting is named `skip_tiers`; `tiers_classifier` was not found in the checked code/configuration. The behaviour of an ordinary `Software Engineer -> mid` is pinned in core `tests/classify-tier-position.test.mjs`; text positive/negative and skipping a missing description in `tests/content-filter-word-prefix.test.mjs`.
 
-Следовательно, согласованная фильтрация общих структурных полей на границе core — планируемое **расширение**, не существующая настройка. Приоритет явного уровня источника над эвристикой заголовка определяется в отдельной задаче roadmap; неизвестные данные согласовано пропускать. Изменение нельзя выдавать за простое включение YAML-флага.
+Consequently, agreed filtering of shared structural fields at the core boundary is a planned **extension**, not an existing setting. The priority of an explicit source level over the title heuristic is defined in a separate roadmap task; unknown data is by agreement let through. The change must not be presented as simply switching on a YAML flag.
 
-Решение пользователя после исследования: включить общие структурированные поля уровня/технологий и отдельный этап их фильтрации в career-ops в [план интеграции](../roadmap/helloworld-provider.md). Согласована шкала `intern / entry / mid / senior`: `Junior → entry`, `Intermediate → mid`, `Senior → senior`, с сохранением исходных меток. Это нормализованные значения, а не буквальные значения источника. Отсутствующие/нераспознанные метки остаются неизвестными и сами по себе не исключают вакансию. Все явно указанные уровни и технологии сохраняются списками; техническая форма предложена в плане. Не стоит маскировать эти сведения внутри `description` или `provenance` только ради обхода allowlist.
+User decision after the research: include shared structured seniority/technology fields and a separate stage for filtering them in career-ops, in the [integration plan](../roadmap/helloworld-provider.md). The scale `intern / entry / mid / senior` is agreed: `Junior -> entry`, `Intermediate -> mid`, `Senior -> senior`, keeping the source labels. These are normalized values, not literal source values. Missing or unrecognized labels stay unknown and by themselves do not exclude a vacancy. All explicitly listed levels and technologies are kept as lists; the technical shape is proposed in the plan. Do not hide this information inside `description` or `provenance` just to get around the allowlist.
 
-## Примеры целевого результата, не вывод работающего адаптера
+### Target result examples, not output of a working adapter
 
-На основе проверенного [Bel-Dev](https://www.helloworld.rs/posao/Data-Engineer/Bel-Dev-d.o.o/760224); без tracking-параметров, HTML и полных текстов:
+Based on the verified [Bel-Dev](https://www.helloworld.rs/posao/Data-Engineer/Bel-Dev-d.o.o/760224) listing; without tracking parameters, HTML and full texts:
 
 ```json
 {
@@ -119,7 +129,7 @@
 }
 ```
 
-Фрагмент зарплаты Finductive из [выдачи](https://www.helloworld.rs/oglasi-za-posao?salary=on):
+Finductive salary fragment from the [listing](https://www.helloworld.rs/oglasi-za-posao?salary=on):
 
 ```json
 {
@@ -134,27 +144,33 @@
 }
 ```
 
-Для `Rad od kuće` предлагается `location="Remote"`, исходный `locationText`, `locations=[]`, `workArrangement="remote"`, `eligibility={"status":"unknown"}`. Пример новых списков уровня и технологий приведён в плане; `postedAt` отсутствует во всех listing-only примерах.
+For `Rad od kuće` the proposal is `location="Remote"`, the original `locationText`, `locations=[]`, `workArrangement="remote"`, `eligibility={"status":"unknown"}`. An example of the new seniority and technology lists is in the plan; `postedAt` is absent from all listing-only examples.
 
-## Ограничения и следующие проверки
+### Limits and next checks
 
-Текущий [URL условий](https://www.helloworld.rs/uslovi-koriscenja) отдаёт загрузочную JS-оболочку; индексированный старый [текст условий](https://helloworld.rs/uslovi-koriscenja) содержит ограничения автоматического использования и передачи контента. Их актуальную полную редакцию прямым HTTP не подтвердили. Свежий footer выдачи всё ещё запрещает скачивание содержимого без разрешения. Разрешение путей robots не снимает этот вопрос. Рекламируемый `/rss/` вернул HTTP 403 и не является проверенным запасным транспортом.
+The current [terms URL](https://www.helloworld.rs/uslovi-koriscenja) returns a JS loading shell; the indexed older [terms text](https://helloworld.rs/uslovi-koriscenja) contains restrictions on automated use and on passing on content. A direct HTTP request did not confirm their current complete edition. The fresh listing footer still prohibits downloading the content without permission. Permission of paths in robots does not remove this question. The advertised `/rss/` returned HTTP 403 and is not a verified fallback transport.
 
-Перед реализацией нужны фикстуры пустой/повреждённой выдачи, отказа доступа, страницы без следующей ссылки, подтверждённого multi-location и нескольких уровней seniority. Для RSD и явного периода оплаты пока нет наблюдаемого примера. HTML-парсер должен различать отсутствие результатов и изменившуюся разметку. Все эти проверки — ограниченная валидация адаптера, не основание добавлять browser fallback, извлечение полных описаний или менять остальные источники.
+Before implementation, fixtures are needed for an empty/damaged listing, access denial, a page without a next link, a confirmed multi-location and several seniority levels. There is no observed example yet for RSD and for an explicit pay period. The HTML parser must distinguish absence of results from changed markup. All these checks are bounded adapter validation, not a reason to add a browser fallback, extract full descriptions or change the other sources.
 
-## Дополнение при реализации, 2026-10-09
+### Addendum during implementation, 2026-10-09
 
-В сохранённой keyword-выдаче найден реальный пример нескольких уровней:
-`Data Engineering Tech Lead` (Madiff, ID 706747) имеет обе видимые метки
-Intermediate и Senior. Они сохранены в сокращённой фикстуре `normal.html`.
+A real example of several levels was found in the saved keyword listing: `Data Engineering Tech Lead` (Madiff, ID 706747) has both visible labels Intermediate and Senior. They are kept in the trimmed fixture `normal.html`.
 
-Один прямой запрос с заведомо отсутствующей фразой подтвердил: сайт показывает
-`(0 oglasa)` и `Trenutno nema oglasa po traženim kriterijumima pretrage.`, но ниже
-в том же `__search-results` размещает 30 новых рекомендованных вакансий
-(`icampaign=alternate-criteria-results-newest`). Реализованный адаптер возвращает
-пустой результат по подтверждённой паре heading/message и не приписывает этим
-рекомендациям совпадение с исходным запросом.
+One direct request with a deliberately absent phrase confirmed that the site shows `(0 oglasa)` and `Trenutno nema oglasa po traženim kriterijumima pretrage.`, but below it, inside the same `__search-results`, places 30 new recommended vacancies (`icampaign=alternate-criteria-results-newest`). The implemented adapter returns an empty result on the confirmed heading/message pair and does not attribute a match with the original query to these recommendations.
 
-Живой запрос реализованного адаптера `q=Python`, одна страница: 30 вакансий,
-29 с технологиями и 30 с уровнем, `page-limit`, без полных описаний/`postedAt`.
-Это проверка 2026-10-09, не гарантия дальнейшей доступности или объёма.
+A live request of the implemented adapter with `q=Python`, one page: 30 vacancies, 29 with technologies and 30 with a level, `page-limit`, no full descriptions or `postedAt`. This is a check of 2026-10-09, not a guarantee of further availability or volume.
+
+## Sources
+
+- [Python listing](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0) and [second page](https://www.helloworld.rs/oglasi-za-posao/stranica/30?tag=69&disable_saved_search=0)
+- [Data Engineer search](https://www.helloworld.rs/oglasi-za-posao?q=Data%20Engineer)
+- [Salary listing](https://www.helloworld.rs/oglasi-za-posao?salary=on)
+- [Bel-Dev card 760224](https://www.helloworld.rs/posao/Data-Engineer/Bel-Dev-d.o.o/760224)
+- [robots.txt](https://www.helloworld.rs/robots.txt)
+- [Terms of use](https://www.helloworld.rs/uslovi-koriscenja) and [older indexed terms](https://helloworld.rs/uslovi-koriscenja)
+- Repository code: [lib/normalize.mjs](../../lib/normalize.mjs), [lib/compensation.mjs](../../lib/compensation.mjs), [lib/paginate.mjs](../../lib/paginate.mjs), [lib/dedup.mjs](../../lib/dedup.mjs), [companion/core-contract.patch](../../companion/core-contract.patch)
+- Core checkout (read-only, outside this repository): `career-ops/plugins/_engine.mjs`, `providers/local-parser.mjs`, `scan.mjs`, `title-keywords.mjs`, `classify-tier.mjs`, `tests/classify-tier-position.test.mjs`, `tests/content-filter-word-prefix.test.mjs`
+
+## Conclusion
+
+The public HTML listing is technically readable without a browser and carries enough fields (title, employer, place and mode, explicit salary, seniority labels, technology tags) for a listing-only adapter. The published access and content terms restrict downloading and automated use, and their complete current edition could not be verified, so the source stays opt-in. Seniority and technologies need shared optional Job fields and a separate core filtering stage; see the [HelloWorld provider plan](../roadmap/helloworld-provider.md) and the [provider page](../providers/helloworld-rs.md).
