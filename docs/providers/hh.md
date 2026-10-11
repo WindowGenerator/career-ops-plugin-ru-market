@@ -6,7 +6,7 @@ Type: guide
 
 ## Status
 
-Since 0.7.0 the `ru-market` plugin does not call the HH API: the adapter `lib/hh.mjs`, the variable `HH_ACCESS_TOKEN` and the host `api.hh.ru` are removed. The API answered `403` already on the first listing page. HH is collected by a separately installed browser companion through core `provider: local-parser`. The companion is not part of the plugin and runs outside plugin host restrictions.
+The `ru-market` plugin does not call the HH API and has no HH adapter. HH is collected by a separately installed browser companion through core `provider: local-parser`. The companion is not part of the plugin and runs outside plugin host restrictions.
 
 ## Transport and access
 
@@ -14,13 +14,6 @@ Since 0.7.0 the `ru-market` plugin does not call the HH API: the adapter `lib/hh
 - Installation: `install.sh` puts `scripts/ru-market/scan-hh.mjs` and the shared module `scripts/ru-market/lib/untrusted.mjs` into career-ops and does not touch core (no patches since 0.8.0) or edit `portals.yml`. The companion needs stock upstream career-ops that contains upstream PR #4697, so that `local-parser` passes its extra job fields through. Details: [companion/README.md](../../companion/README.md).
 - Authorization: none.
 - Legal and technical risk: the [HH terms](https://hh.ru/article/33205) require programmatic access through the API; the companion uses an anonymous browser context and stops on access checks. The user accepts this risk.
-
-### Migration from 0.6.x
-
-1. Remove `hh` from `ru_market.primary_source_order` (allowed list lengths are now 2, 4, 5 or 6; `habr-career` and `geekjob` are mandatory) and the `sources.hh` block from `portals.yml`; otherwise the plugin throws a `config` error.
-2. Remove `HH_ACCESS_TOKEN` from `.env`: it is no longer read.
-3. Add a separate `HH browser` entry with an `hh_browser` block from the example; move queries from `sources.hh.queries` to `hh_browser.queries`, `area` and `max_pages` to `area` and `pages`, `title_only` to `search_field: [name]`. The fields `schedule`, `period`, `host`, `locale`, `per_page` are not supported.
-4. Reinstall the plugin and the companion with the command from the README: it installs the shared module `scripts/ru-market/lib/untrusted.mjs`. Since 0.8.0 the installer does not patch core; see the 0.8.0 notes in [RELEASE_NOTES.md](../../RELEASE_NOTES.md) for removing a patch applied by an older installer.
 
 ## Configuration
 

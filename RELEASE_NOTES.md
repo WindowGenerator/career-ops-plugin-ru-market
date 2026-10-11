@@ -9,6 +9,7 @@ Breaking changes:
 - `salary` in companion output is the midpoint of a complete RUB monthly range (`min` = `max`). One-sided ranges, other currencies and other or unknown periods have no `salary`; the exact range, raw text, period and tax basis stay in `compensation`, which core ignores. Core's `salary_filter` compares only `salary` numbers and ignores period and tax basis.
 - Status feature removed. The plugin no longer attaches `sourceStatuses`/`queryStatuses`; the companion no longer reports statuses to core. A blocked or partial HH run exits 0 with the jobs found, the reason is on stderr and in `queries-summary.json` (`queries`), `query-XX.json` and `checkpoint.json`. Exit 1 remains for configuration errors and for an incomplete `--scan` run. Artifact files, `--resume` and the cache workflow are unchanged.
 - No trust rule for injection flags: `injectionFlags` stays on the job as information, core adds no `prompt-injection-suspected` flag and no -30 trust score. `lib/untrusted.mjs` sanitisation is unchanged.
+- HH API migration support removed. `hh` in `ru_market` (`source`, `sources.hh`, `primary_source_order`) is now rejected by the generic unsupported-source checks, without the 0.7.0 `local-parser` hint. The 0.6.x migration guide and `examples/registry-pr.md` are deleted.
 - The companion no longer imports `providers/_compensation.mjs` from core; the parser is inlined.
 - Tests and CI run against unpatched upstream career-ops (`CAREER_OPS_ROOT` must be a stock checkout); `test/core-patch.mjs` is removed.
 

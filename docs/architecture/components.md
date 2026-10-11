@@ -92,7 +92,7 @@ flowchart LR
 | Core | Never modified. Since 0.8.0 there are no patches: `local-parser` passes the companion's extra fields (`compensation`, `injectionFlags`, `matchedQueries` and others) through unchanged (upstream PR #4697), and core reads only the fields it knows (`salary` among them). There is no status channel and no trust rule for `injectionFlags`. |
 | Shared code | `lib/untrusted.mjs` has one source copy. `install.sh` puts it into `scripts/ru-market/lib/` and records its sha256 in `scan-hh.install.json`; the installer does not overwrite locally modified files. |
 | Code layout | `lib/providers/` holds one module per source and knows only that source's markup or JSON. `lib/transport/` is the only network door (allowlist, queue, retry). `lib/processors/` holds the shared steps (page pipeline, pagination, normalisation, compensation, deduplication). `lib/helpers/html.mjs` is the HTML tree reader. `lib/config.mjs`, `lib/errors.mjs` and `lib/untrusted.mjs` stay at the root; `lib/untrusted.mjs` must not move because `install.sh`, the release workflow and the companion rely on that path. |
-| Source separation | `hh` in `ru_market.primary_source_order` is rejected with a migration error. The source order allows lengths 2, 4, 5 and 6. |
+| Source separation | HH is not a source of this plugin; the browser companion collects it. The source order allows lengths 2, 4, 5 and 6. |
 
 ## Extension: a new provider
 

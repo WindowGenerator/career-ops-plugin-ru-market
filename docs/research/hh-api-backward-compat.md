@@ -96,7 +96,7 @@ After removing the three `hhRemoved` calls, `hh` still fails with `config` error
 - [README.md](../../README.md), [skill.md](../../skill.md), [RELEASE_NOTES.md](../../RELEASE_NOTES.md), [RELEASING.md](../../RELEASING.md)
 - [docs/providers/hh.md](../providers/hh.md), [docs/providers/README.md](../providers/README.md), [docs/architecture/components.md](../architecture/components.md)
 - [docs/roadmap/provider-architecture-review.md](../roadmap/provider-architecture-review.md), [docs/research/hh-companion-alternatives.md](hh-companion-alternatives.md)
-- [examples/registry-pr.md](../../examples/registry-pr.md), [examples/hh-browser.yml](../../examples/hh-browser.yml)
+- `examples/registry-pr.md` (deleted), [examples/hh-browser.yml](../../examples/hh-browser.yml)
 
 ## Conclusion
 

@@ -19,8 +19,8 @@ separate source calls cannot preserve links across calls. The default primary
 board is Habr Career. Notes identify the actual board (`source: habr-career` etc.), while core
 records `ru-market-api`. Possible cross-listings are suggestions, not merges.
 
-HH has no adapter in this plugin since 0.7.0: `hh` in `ru_market` is rejected with a migration
-error. Use the browser companion through `provider: local-parser` (see `docs/providers/hh.md`).
+HH is not a `ru_market` source. Use the browser companion through `provider: local-parser`
+(see `docs/providers/hh.md`).
 Habr Career and GeekJob support `html` and `auto`. An access error must not trigger
 CAPTCHA bypass, account access or requests to employer sites.
 SuperJob and Trudvsem (Work in Russia) use public APIs and are disabled by default. To enable

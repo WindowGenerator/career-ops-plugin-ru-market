@@ -18,7 +18,7 @@ One page per provider, plus the provider matrix below. The matrix describes the 
 | getmatch | Undocumented JSON `getmatch.ru/api/offers` | None | Experimental (0.4.0); usage terms and live pagination unverified | No | [getmatch](getmatch.md) |
 | HelloWorld.rs | Public HTML listing (Serbia) | None | Implemented (0.6.0); source terms restrict automated use | No | [helloworld-rs](helloworld-rs.md) |
 
-Source selection and order are validated in `lib/config.mjs`: `ru_market.source` is `all` or one source id; `primary_source_order` must contain the two core sources (`habr-career`, `geekjob`), the four, five or all six sources, exactly once (lengths 2, 4, 5, 6 since 0.7.0). Missing optional sources are appended in stable order. `hh` in `primary_source_order`, `source: hh` or `sources.hh` fails with a `config` error pointing to `local-parser`.
+Source selection and order are validated in `lib/config.mjs`: `ru_market.source` is `all` or one source id; `primary_source_order` must contain the two core sources (`habr-career`, `geekjob`), the four, five or all six sources, exactly once (lengths 2, 4, 5, 6 since 0.7.0). Missing optional sources are appended in stable order.
 
 ## Common behaviour
 

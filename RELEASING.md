@@ -32,7 +32,7 @@
    fork/branch, add the generated file as `plugins-registry/ru-market.json` and
    include `registrationIssue` pointing to the real issue. Use the upstream
    `plugin-registry.md` PR template. Do not invent an issue number or pin a tag
-   name as a SHA. An initial PR description is in `examples/registry-pr.md`.
+   name as a SHA.
 7. For an update, rerun the new release's `install.sh` from the career-ops directory.
    It detects the installed plugin and replaces it with the new SHA using `--confirm`.
    The `update.sh` release asset is an identical copy and accepts fresh installs too.

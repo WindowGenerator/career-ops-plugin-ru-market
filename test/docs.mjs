@@ -299,7 +299,7 @@ test('scope: Cyrillic is checked in docs, root, companion README and examples ma
     inCyrillicScope('docs/research/x.md') &&
       inCyrillicScope('README.md') &&
       inCyrillicScope('companion/README.md') &&
-      inCyrillicScope('examples/registry-pr.md'),
+      inCyrillicScope('examples/notes.md'),
   );
   assert(
     !inCyrillicScope('fixtures/x/README.md') &&
