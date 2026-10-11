@@ -1,8 +1,11 @@
 import assert from 'node:assert';
 import { parseSalary, structuredSalary } from '../lib/processors/normalize.mjs';
 import {
-  compensationFromSalary, compensationMatchesFilter, formatExplicitCompensation,
-  normalizeCompensation, parseCompensation,
+  compensationFromSalary,
+  compensationMatchesFilter,
+  formatExplicitCompensation,
+  normalizeCompensation,
+  parseCompensation,
 } from '../lib/processors/compensation.mjs';
 import { confidence, deduplicate, localDedup, sourceOf } from '../lib/processors/dedup.mjs';
 
@@ -11,9 +14,13 @@ const test = (name, run) => tests.push({ name, run });
 const DAY = 86400_000;
 const words = count => Array.from({ length: count }, (_, i) => `word${i}`).join(' ');
 const job = (source, id, extra = {}) => ({
-  title: 'Python Developer', company: 'Acme', location: 'Москва',
+  title: 'Python Developer',
+  company: 'Acme',
+  location: 'Москва',
   url: source === 'getmatch' ? `https://getmatch.ru/vacancies/${id}-python` : `https://example.test/${source}/${id}`,
-  description: words(20), note: `source: ${source}`, ...extra,
+  description: words(20),
+  note: `source: ${source}`,
+  ...extra,
 });
 
 // --- salary parsing -------------------------------------------------------
@@ -93,10 +100,17 @@ test('normalizeCompensation: an explicit string diagnostic overrides the compute
 test('parseCompensation: amounts, period, tax basis and open bounds', () => {
   assert.deepStrictEqual(parseCompensation('от 100 000 ₽ в месяц на руки'), {
     rawText: 'от 100 000 ₽ в месяц на руки',
-    period: 'month', taxBasis: 'net', currency: 'RUB', min: 100000,
+    period: 'month',
+    taxBasis: 'net',
+    currency: 'RUB',
+    min: 100000,
   });
   assert.deepStrictEqual(parseCompensation('до 5 000 $ per year gross'), {
-    rawText: 'до 5 000 $ per year gross', period: 'year', taxBasis: 'gross', currency: 'USD', max: 5000,
+    rawText: 'до 5 000 $ per year gross',
+    period: 'year',
+    taxBasis: 'gross',
+    currency: 'USD',
+    max: 5000,
   });
   assert.strictEqual(parseCompensation('100–200 тыс. ₽ за смену').period, 'shift');
   assert.deepStrictEqual(parseCompensation('50 EUR per hour').period, 'hour');
@@ -200,11 +214,17 @@ test('sourceOf: reads the source id from the note, empty when absent', () => {
 test('localDedup: same posting is merged, matchedQueries are unioned by queryId, input is not mutated', () => {
   const a = job('habr-career', '1', { matchedQueries: [{ query: 'a', queryId: 'q1' }] });
   const b = job('habr-career', '1', {
-    matchedQueries: [{ query: 'a', queryId: 'q1' }, { query: 'b', queryId: 'q2' }],
+    matchedQueries: [
+      { query: 'a', queryId: 'q1' },
+      { query: 'b', queryId: 'q2' },
+    ],
   });
   const result = localDedup([a, b, job('habr-career', '2')]);
   assert.strictEqual(result.length, 2);
-  assert.deepStrictEqual(result[0].matchedQueries.map(q => q.queryId), ['q1', 'q2']);
+  assert.deepStrictEqual(
+    result[0].matchedQueries.map(q => q.queryId),
+    ['q1', 'q2'],
+  );
   assert.strictEqual(a.matchedQueries.length, 1);
   assert.notStrictEqual(result[0], a);
 });
@@ -244,8 +264,13 @@ test('confidence: cross-source needs same company (legal form ignored), title, l
   const usd = { currency: 'USD', min: 1 };
   const rubles = job('geekjob', '1', { salary: { currency: 'RUB', min: 1 } });
   assert.strictEqual(confidence({ ...a, salary: usd }, rubles), 'low');
-  assert.strictEqual(confidence({ ...a, salary: { currency: 'RUB', min: 1, max: 5 } },
-    job('geekjob', '1', { salary: { currency: 'RUB', min: 9 } })), 'low');
+  assert.strictEqual(
+    confidence(
+      { ...a, salary: { currency: 'RUB', min: 1, max: 5 } },
+      job('geekjob', '1', { salary: { currency: 'RUB', min: 9 } }),
+    ),
+    'low',
+  );
 });
 
 test('confidence: descriptions of 12+ distinct words are compared; similar ones with a location are high', () => {
@@ -305,8 +330,10 @@ test('legacy: salary notes are merged by splitting the donor note on "; salary: 
     job('habr-career', '1'),
     job('geekjob', '9', { note: 'source: geekjob; salary: от 100 ₽; extra' }),
   ]);
-  assert.strictEqual(result[0].note,
-    'source: habr-career; cross-listed: GeekJob https://example.test/geekjob/9; GeekJob salary: от 100 ₽; extra');
+  assert.strictEqual(
+    result[0].note,
+    'source: habr-career; cross-listed: GeekJob https://example.test/geekjob/9; GeekJob salary: от 100 ₽; extra',
+  );
 });
 
 test('legacy: an order list without the source ranks it first because indexOf is -1', () => {
@@ -318,8 +345,13 @@ test('legacy: an order list without the source ranks it first because indexOf is
 
 let failures = 0;
 for (const { name, run } of tests) {
-  try { await run(); console.log(`ok - ${name}`); }
-  catch (error) { failures++; console.error(`FAIL - ${name}`, error); }
+  try {
+    await run();
+    console.log(`ok - ${name}`);
+  } catch (error) {
+    failures++;
+    console.error(`FAIL - ${name}`, error);
+  }
 }
 console.log(`${tests.length - failures}/${tests.length} processor tests passed`);
 process.exitCode = failures ? 1 : 0;

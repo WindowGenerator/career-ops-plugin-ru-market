@@ -42,9 +42,7 @@ test('parseHtml: a stray end tag is ignored', () => {
 });
 
 test('parseHtml: comments, script and style payloads are dropped', () => {
-  const root = parseHtml(
-    '<p>a<!-- hidden <b>x</b> -->b<script>var x = "<p>evil</p>";</script><style>p{}</style>c</p>',
-  );
+  const root = parseHtml('<p>a<!-- hidden <b>x</b> -->b<script>var x = "<p>evil</p>";</script><style>p{}</style>c</p>');
   assert.strictEqual(all(root, n => ['script', 'style', 'b'].includes(n.tag)).length, 0);
 });
 
@@ -54,8 +52,14 @@ test('legacy: removed comments and scripts glue the surrounding text together', 
 });
 
 test('parseHtml: non-string input is a broken-markup SourceError', () => {
-  assert.throws(() => parseHtml(undefined), e => e.category === 'broken-markup');
-  assert.throws(() => parseHtml(null), e => e.category === 'broken-markup');
+  assert.throws(
+    () => parseHtml(undefined),
+    e => e.category === 'broken-markup',
+  );
+  assert.throws(
+    () => parseHtml(null),
+    e => e.category === 'broken-markup',
+  );
 });
 
 test('parseHtml: quoted attribute containing > does not end the tag', () => {
@@ -68,9 +72,18 @@ test('hasClass, byClass and all: class lookup is token based', () => {
   assert.strictEqual(hasClass(first(root, 'div'), 'card'), true);
   assert.strictEqual(hasClass(first(root, 'span'), 'card'), false);
   assert.strictEqual(hasClass(undefined, 'card'), false);
-  assert.deepStrictEqual(byClass(root, 'card').map(n => n.tag), ['div', 'i']);
-  assert.deepStrictEqual(all(undefined, () => true), []);
-  assert.deepStrictEqual(all(root, n => n.tag === 'nothing'), []);
+  assert.deepStrictEqual(
+    byClass(root, 'card').map(n => n.tag),
+    ['div', 'i'],
+  );
+  assert.deepStrictEqual(
+    all(undefined, () => true),
+    [],
+  );
+  assert.deepStrictEqual(
+    all(root, n => n.tag === 'nothing'),
+    [],
+  );
 });
 
 test('nodeText: joins children with spaces, collapses whitespace, tolerates missing nodes', () => {
@@ -82,8 +95,14 @@ test('nodeText: joins children with spaces, collapses whitespace, tolerates miss
 
 test('nodeText: skip predicate removes whole subtrees', () => {
   const root = parseHtml('<div>keep<span class="salary">100</span><b>more</b></div>');
-  assert.strictEqual(nodeText(first(root, 'div'), n => hasClass(n, 'salary')), 'keep more');
-  assert.strictEqual(nodeText(first(root, 'span'), n => hasClass(n, 'salary')), '');
+  assert.strictEqual(
+    nodeText(first(root, 'div'), n => hasClass(n, 'salary')),
+    'keep more',
+  );
+  assert.strictEqual(
+    nodeText(first(root, 'span'), n => hasClass(n, 'salary')),
+    '',
+  );
 });
 
 test('checkAccess: challenge titles, challenge ids and login prose are access errors', () => {
@@ -93,7 +112,12 @@ test('checkAccess: challenge titles, challenge ids and login prose are access er
     '<div id="smartcaptcha-box"></div>',
     '<p>Verify you are human</p>',
     '<p>Войдите, чтобы продолжить</p>',
-  ]) assert.throws(() => checkAccess(parseHtml(html)), e => e.category === 'access', html);
+  ])
+    assert.throws(
+      () => checkAccess(parseHtml(html)),
+      e => e.category === 'access',
+      html,
+    );
 });
 
 test('checkAccess: ordinary pages pass', () => {
@@ -101,8 +125,10 @@ test('checkAccess: ordinary pages pass', () => {
 });
 
 test('checkAccess: password input is a login wall unless a listing is present', () => {
-  assert.throws(() => checkAccess(parseHtml('<form><input type="password"></form>')),
-    e => e.category === 'access' && e.message === 'Login wall');
+  assert.throws(
+    () => checkAccess(parseHtml('<form><input type="password"></form>')),
+    e => e.category === 'access' && e.message === 'Login wall',
+  );
   assert.doesNotThrow(() => checkAccess(parseHtml('<input type="password"><div class="vacancy-card"></div>')));
   assert.doesNotThrow(() => checkAccess(parseHtml('<input type="password"><ul class="serp-list"></ul>')));
   assert.doesNotThrow(() => checkAccess(parseHtml('<input type="text">')));
@@ -148,8 +174,13 @@ test('legacy: parseHtml falls back to map/lastIndexOf when findLastIndex is unav
 
 let failures = 0;
 for (const { name, run } of tests) {
-  try { await run(); console.log(`ok - ${name}`); }
-  catch (error) { failures++; console.error(`FAIL - ${name}`, error); }
+  try {
+    await run();
+    console.log(`ok - ${name}`);
+  } catch (error) {
+    failures++;
+    console.error(`FAIL - ${name}`, error);
+  }
 }
 console.log(`${tests.length - failures}/${tests.length} html tests passed`);
 process.exitCode = failures ? 1 : 0;

@@ -7,22 +7,41 @@ import { adapters } from '../index.mjs';
 import { categoryOf } from '../lib/errors.mjs';
 
 export async function checkHealth(ctx, { source = 'all' } = {}) {
-  const config = parseConfig({ ru_market: { source, max_pages: 1, sources: source === 'getmatch' ? { getmatch: { enabled: true } } : source === 'helloworld-rs' ? { helloworld_rs: { enabled: true, queries: ['Python'] } } : {} } });
-  const sources = await Promise.all(config.selected.map(async source => {
-    try {
-      // Exactly one listing request per source, with no retries or detail fetches.
-      const jobs = await adapters[source](config.sources[source], ctx, { retries: 0 });
-      return { source, status: jobs.length ? 'reachable' : 'empty', count: jobs.length };
-    } catch (error) { return { source, status: categoryOf(error) }; }
-  }));
+  const config = parseConfig({
+    ru_market: {
+      source,
+      max_pages: 1,
+      sources:
+        source === 'getmatch'
+          ? { getmatch: { enabled: true } }
+          : source === 'helloworld-rs'
+            ? { helloworld_rs: { enabled: true, queries: ['Python'] } }
+            : {},
+    },
+  });
+  const sources = await Promise.all(
+    config.selected.map(async source => {
+      try {
+        // Exactly one listing request per source, with no retries or detail fetches.
+        const jobs = await adapters[source](config.sources[source], ctx, { retries: 0 });
+        return { source, status: jobs.length ? 'reachable' : 'empty', count: jobs.length };
+      } catch (error) {
+        return { source, status: categoryOf(error) };
+      }
+    }),
+  );
   return { ok: sources.every(s => ['reachable', 'empty'].includes(s.status)), sources };
 }
 
 async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
-    console.log('Usage: node scripts/health.mjs [--career-ops /path/to/career-ops] [--source all|getmatch|helloworld-rs]');
-    console.log('Separate browser preflight (from career-ops): node scripts/ru-market/scan-hh.mjs --preflight --channel chrome; use --version for tool identity.');
+    console.log(
+      'Usage: node scripts/health.mjs [--career-ops /path/to/career-ops] [--source all|getmatch|helloworld-rs]',
+    );
+    console.log(
+      'Separate browser preflight (from career-ops): node scripts/ru-market/scan-hh.mjs --preflight --channel chrome; use --version for tool identity.',
+    );
     return;
   }
   let corePath = '../career-ops';
@@ -44,7 +63,13 @@ async function main() {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch(() => {
-    console.log(JSON.stringify({ ok: false, status: 'setup-error', message: 'Provide a career-ops checkout with plugins/_engine.mjs using --career-ops' }));
+    console.log(
+      JSON.stringify({
+        ok: false,
+        status: 'setup-error',
+        message: 'Provide a career-ops checkout with plugins/_engine.mjs using --career-ops',
+      }),
+    );
     process.exitCode = 2;
   });
 }

@@ -39,7 +39,10 @@ async function fetchAll(entry, ctx) {
   let successes = 0;
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
-      ctx.log?.('ru-market', JSON.stringify({ source: config.selected[index], category: categoryOf(result.reason), status: 'failed' }));
+      ctx.log?.(
+        'ru-market',
+        JSON.stringify({ source: config.selected[index], category: categoryOf(result.reason), status: 'failed' }),
+      );
       return;
     }
     successes++;
@@ -58,7 +61,9 @@ async function fetchAll(entry, ctx) {
 export default {
   provider: {
     id: 'ru-market',
-    detect() { return null; },
+    detect() {
+      return null;
+    },
     fetch: fetchAll,
   },
 };

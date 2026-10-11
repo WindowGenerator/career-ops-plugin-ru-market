@@ -107,8 +107,13 @@ test('legacy: status 0 or NaN does not classify as http, message patterns still 
 
 let failures = 0;
 for (const { name, run } of tests) {
-  try { await run(); console.log(`ok - ${name}`); }
-  catch (error) { failures++; console.error(`FAIL - ${name}`, error); }
+  try {
+    await run();
+    console.log(`ok - ${name}`);
+  } catch (error) {
+    failures++;
+    console.error(`FAIL - ${name}`, error);
+  }
 }
 console.log(`${tests.length - failures}/${tests.length} text tests passed`);
 process.exitCode = failures ? 1 : 0;

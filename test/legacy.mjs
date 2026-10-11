@@ -15,7 +15,7 @@ const test = (name, run) => tests.push({ name, run });
 const job = id => ({ title: `Job ${id}`, url: `https://example.test/${id}`, note: 'source: habr-career' });
 const silent = { log() {} };
 
-const habrPage = (card) => `<html><body><div class="vacancy-card">${card}</div></body></html>`;
+const habrPage = card => `<html><body><div class="vacancy-card">${card}</div></body></html>`;
 const habrCard = ({ date = '', chips = '' } = {}) => `
   <div class="vacancy-card__date">${date}</div>
   <div class="vacancy-card__company"><a>Acme</a></div>
@@ -27,10 +27,16 @@ test('legacy: getmatch and helloworld-rs stop remaining routes on an access erro
     if (route === 'a') throw new SourceError('access', 'blocked');
     return { jobs: [job(route)], hasNext: false };
   };
-  assert.deepStrictEqual((await paginate('superjob', ['a', 'b'], 1, load, silent)).map(j => j.title), ['Job b']);
+  assert.deepStrictEqual(
+    (await paginate('superjob', ['a', 'b'], 1, load, silent)).map(j => j.title),
+    ['Job b'],
+  );
   await assert.rejects(paginate('getmatch', ['a', 'b'], 1, load, silent), e => e.category === 'access');
   const jobs = await paginate('helloworld-rs', ['b', 'a', 'c'], 1, load, silent);
-  assert.deepStrictEqual(jobs.map(j => j.title), ['Job b']);
+  assert.deepStrictEqual(
+    jobs.map(j => j.title),
+    ['Job b'],
+  );
 });
 
 test('legacy: paginate writes matchedQueries onto the job objects returned by the provider', async () => {
@@ -41,10 +47,22 @@ test('legacy: paginate writes matchedQueries onto the job objects returned by th
 
 test('legacy: paginate stops a route on an empty page unless the provider sets continueOnEmpty', async () => {
   let calls = 0;
-  await paginate('superjob', ['q'], 3, async () => { calls++; return { jobs: [], hasNext: true }; }, silent);
+  await paginate(
+    'superjob',
+    ['q'],
+    3,
+    async () => {
+      calls++;
+      return { jobs: [], hasNext: true };
+    },
+    silent,
+  );
   assert.strictEqual(calls, 1);
   calls = 0;
-  const emptyButContinue = async () => { calls++; return { jobs: [], hasNext: true, continueOnEmpty: true }; };
+  const emptyButContinue = async () => {
+    calls++;
+    return { jobs: [], hasNext: true, continueOnEmpty: true };
+  };
   await paginate('getmatch', ['q'], 3, emptyButContinue, silent);
   assert.strictEqual(calls, 3);
 });
@@ -52,12 +70,18 @@ test('legacy: paginate stops a route on an empty page unless the provider sets c
 test('legacy: index.mjs calls adapters with (config, ctx) only, so fetch options are never passed', async () => {
   const original = adapters['habr-career'];
   const seen = [];
-  adapters['habr-career'] = (...args) => { seen.push(args.length); return original(...args); };
+  adapters['habr-career'] = (...args) => {
+    seen.push(args.length);
+    return original(...args);
+  };
   try {
-    await plugin.provider.fetch({ ru_market: { source: 'habr-career' } }, {
-      fetchText: async () => '<html><body><div class="no-content">Вакансий нет</div></body></html>',
-      ...silent,
-    });
+    await plugin.provider.fetch(
+      { ru_market: { source: 'habr-career' } },
+      {
+        fetchText: async () => '<html><body><div class="no-content">Вакансий нет</div></body></html>',
+        ...silent,
+      },
+    );
   } finally {
     adapters['habr-career'] = original;
   }
@@ -80,15 +104,36 @@ test('legacy: habr drops the date of a card whose date text says "updated"', () 
 });
 
 test('legacy: superjob and trudvsem rebuild the salary note from parsed amounts with the same wording', () => {
-  const superjob = parseSuperjob({ more: false, objects: [{
-    profession: 'Dev', link: 'https://www.superjob.ru/vakansii/dev-123.html',
-    currency: 'rub', payment_from: 100, payment_to: 200,
-  }] });
+  const superjob = parseSuperjob({
+    more: false,
+    objects: [
+      {
+        profession: 'Dev',
+        link: 'https://www.superjob.ru/vakansii/dev-123.html',
+        currency: 'rub',
+        payment_from: 100,
+        payment_to: 200,
+      },
+    ],
+  });
   assert.strictEqual(superjob.jobs[0].note, 'source: superjob; salary: from 100 to 200 RUB');
-  const trudvsem = parseTrudvsem({ status: '200', meta: { total: 1 }, results: { vacancies: [{ vacancy: {
-    'job-name': 'Dev', vac_url: 'https://trudvsem.ru/vacancy/card/123/abc-1',
-    currency: 'руб.', salary_min: 100, salary_max: 200,
-  } }] } });
+  const trudvsem = parseTrudvsem({
+    status: '200',
+    meta: { total: 1 },
+    results: {
+      vacancies: [
+        {
+          vacancy: {
+            'job-name': 'Dev',
+            vac_url: 'https://trudvsem.ru/vacancy/card/123/abc-1',
+            currency: 'руб.',
+            salary_min: 100,
+            salary_max: 200,
+          },
+        },
+      ],
+    },
+  });
   assert.strictEqual(trudvsem.jobs[0].note, 'source: trudvsem; salary: from 100 to 200 RUB');
 });
 
@@ -104,8 +149,13 @@ test('legacy: geekjob uses a card date only when it carries an explicit publicat
 
 let failures = 0;
 for (const { name, run } of tests) {
-  try { await run(); console.log(`ok - ${name}`); }
-  catch (error) { failures++; console.error(`FAIL - ${name}`, error); }
+  try {
+    await run();
+    console.log(`ok - ${name}`);
+  } catch (error) {
+    failures++;
+    console.error(`FAIL - ${name}`, error);
+  }
 }
 console.log(`${tests.length - failures}/${tests.length} legacy tests passed`);
 process.exitCode = failures ? 1 : 0;
