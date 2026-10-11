@@ -23,14 +23,23 @@ export async function checkHealth(ctx, { source = 'all' } = {}) {
     config.selected.map(async source => {
       try {
         // Exactly one listing request per source, with no retries or detail fetches.
-        const jobs = await adapters[source](config.sources[source], ctx, { retries: 0 });
-        return { source, status: jobs.length ? 'reachable' : 'empty', count: jobs.length };
+        const jobs = await adapters[source](config.sources[source], ctx, {
+          retries: 0,
+        });
+        return {
+          source,
+          status: jobs.length ? 'reachable' : 'empty',
+          count: jobs.length,
+        };
       } catch (error) {
         return { source, status: categoryOf(error) };
       }
     }),
   );
-  return { ok: sources.every(s => ['reachable', 'empty'].includes(s.status)), sources };
+  return {
+    ok: sources.every(s => ['reachable', 'empty'].includes(s.status)),
+    sources,
+  };
 }
 
 async function main() {
@@ -49,25 +58,37 @@ async function main() {
   for (let i = 0; i < args.length; i += 2) {
     if (!args[i + 1]) throw new Error('Missing health option value');
     if (args[i] === '--career-ops') corePath = args[i + 1];
-    else if (args[i] === '--source' && ['all', 'getmatch', 'helloworld-rs'].includes(args[i + 1])) source = args[i + 1];
+    else if (
+      args[i] === '--source' &&
+      ['all', 'getmatch', 'helloworld-rs'].includes(args[i + 1])
+    )
+      source = args[i + 1];
     else throw new Error('Invalid health arguments');
   }
   const core = resolve(corePath);
   // Reuse the existing guarded context; health must obey the same egress rules.
-  const { buildCtx } = await import(pathToFileURL(resolve(core, 'plugins/_engine.mjs')).href);
-  const manifest = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+  const { buildCtx } = await import(
+    pathToFileURL(resolve(core, 'plugins/_engine.mjs')).href
+  );
+  const manifest = JSON.parse(
+    readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'),
+  );
   const ctx = buildCtx(manifest);
   const result = await checkHealth({ ...ctx, log: () => {} }, { source });
   console.log(JSON.stringify(result));
   process.exitCode = result.ok ? 0 : 1;
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   main().catch(() => {
     console.log(
       JSON.stringify({
         ok: false,
         status: 'setup-error',
-        message: 'Provide a career-ops checkout with plugins/_engine.mjs using --career-ops',
+        message:
+          'Provide a career-ops checkout with plugins/_engine.mjs using --career-ops',
       }),
     );
     process.exitCode = 2;

@@ -1,15 +1,29 @@
 import assert from 'node:assert';
-import { all, byClass, checkAccess, hasClass, hasNext, nodeText, parseHtml } from '../lib/helpers/html.mjs';
+import {
+  all,
+  byClass,
+  checkAccess,
+  hasClass,
+  hasNext,
+  nodeText,
+  parseHtml,
+} from '../lib/helpers/html.mjs';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
 const first = (root, tag) => all(root, n => n.tag === tag)[0];
 
 test('parseHtml: builds a tree with lower-cased tags and attributes', () => {
-  const root = parseHtml('<DIV Class="a b" data-x=\'1\' hidden><P>text</P></DIV>');
+  const root = parseHtml(
+    '<DIV Class="a b" data-x=\'1\' hidden><P>text</P></DIV>',
+  );
   const div = root.children[0];
   assert.strictEqual(div.tag, 'div');
-  assert.deepStrictEqual(div.attrs, { class: 'a b', 'data-x': '1', hidden: '' });
+  assert.deepStrictEqual(div.attrs, {
+    class: 'a b',
+    'data-x': '1',
+    hidden: '',
+  });
   assert.strictEqual(div.children[0].tag, 'p');
   assert.deepStrictEqual(div.children[0].children, ['text']);
 });
@@ -42,13 +56,21 @@ test('parseHtml: a stray end tag is ignored', () => {
 });
 
 test('parseHtml: comments, script and style payloads are dropped', () => {
-  const root = parseHtml('<p>a<!-- hidden <b>x</b> -->b<script>var x = "<p>evil</p>";</script><style>p{}</style>c</p>');
-  assert.strictEqual(all(root, n => ['script', 'style', 'b'].includes(n.tag)).length, 0);
+  const root = parseHtml(
+    '<p>a<!-- hidden <b>x</b> -->b<script>var x = "<p>evil</p>";</script><style>p{}</style>c</p>',
+  );
+  assert.strictEqual(
+    all(root, n => ['script', 'style', 'b'].includes(n.tag)).length,
+    0,
+  );
 });
 
 test('legacy: removed comments and scripts glue the surrounding text together', () => {
   // The payload is cut out before tokenizing, so "a", "b" and "c" become one text node.
-  assert.strictEqual(nodeText(parseHtml('<p>a<!-- x -->b<script>1</script>c</p>')), 'abc');
+  assert.strictEqual(
+    nodeText(parseHtml('<p>a<!-- x -->b<script>1</script>c</p>')),
+    'abc',
+  );
 });
 
 test('parseHtml: non-string input is a broken-markup SourceError', () => {
@@ -68,7 +90,9 @@ test('parseHtml: quoted attribute containing > does not end the tag', () => {
 });
 
 test('hasClass, byClass and all: class lookup is token based', () => {
-  const root = parseHtml('<div class="card big"><span class="card-title">x</span><i class="card">y</i></div>');
+  const root = parseHtml(
+    '<div class="card big"><span class="card-title">x</span><i class="card">y</i></div>',
+  );
   assert.strictEqual(hasClass(first(root, 'div'), 'card'), true);
   assert.strictEqual(hasClass(first(root, 'span'), 'card'), false);
   assert.strictEqual(hasClass(undefined, 'card'), false);
@@ -94,7 +118,9 @@ test('nodeText: joins children with spaces, collapses whitespace, tolerates miss
 });
 
 test('nodeText: skip predicate removes whole subtrees', () => {
-  const root = parseHtml('<div>keep<span class="salary">100</span><b>more</b></div>');
+  const root = parseHtml(
+    '<div>keep<span class="salary">100</span><b>more</b></div>',
+  );
   assert.strictEqual(
     nodeText(first(root, 'div'), n => hasClass(n, 'salary')),
     'keep more',
@@ -121,7 +147,11 @@ test('checkAccess: challenge titles, challenge ids and login prose are access er
 });
 
 test('checkAccess: ordinary pages pass', () => {
-  assert.doesNotThrow(() => checkAccess(parseHtml('<title>Vacancies</title><div class="vacancy-card">x</div>')));
+  assert.doesNotThrow(() =>
+    checkAccess(
+      parseHtml('<title>Vacancies</title><div class="vacancy-card">x</div>'),
+    ),
+  );
 });
 
 test('checkAccess: password input is a login wall unless a listing is present', () => {
@@ -129,24 +159,53 @@ test('checkAccess: password input is a login wall unless a listing is present', 
     () => checkAccess(parseHtml('<form><input type="password"></form>')),
     e => e.category === 'access' && e.message === 'Login wall',
   );
-  assert.doesNotThrow(() => checkAccess(parseHtml('<input type="password"><div class="vacancy-card"></div>')));
-  assert.doesNotThrow(() => checkAccess(parseHtml('<input type="password"><ul class="serp-list"></ul>')));
+  assert.doesNotThrow(() =>
+    checkAccess(
+      parseHtml('<input type="password"><div class="vacancy-card"></div>'),
+    ),
+  );
+  assert.doesNotThrow(() =>
+    checkAccess(
+      parseHtml('<input type="password"><ul class="serp-list"></ul>'),
+    ),
+  );
   assert.doesNotThrow(() => checkAccess(parseHtml('<input type="text">')));
 });
 
 test('hasNext: habr style page parameter', () => {
   const url = 'https://career.habr.com/vacancies?page=1';
-  assert.strictEqual(hasNext(parseHtml('<a href="/vacancies?page=2">2</a>'), url), true);
-  assert.strictEqual(hasNext(parseHtml('<a href="/vacancies?page=1">1</a>'), url), false);
-  assert.strictEqual(hasNext(parseHtml('<a href="?page=3">3</a>'), 'https://career.habr.com/vacancies?page=2'), true);
+  assert.strictEqual(
+    hasNext(parseHtml('<a href="/vacancies?page=2">2</a>'), url),
+    true,
+  );
+  assert.strictEqual(
+    hasNext(parseHtml('<a href="/vacancies?page=1">1</a>'), url),
+    false,
+  );
+  assert.strictEqual(
+    hasNext(
+      parseHtml('<a href="?page=3">3</a>'),
+      'https://career.habr.com/vacancies?page=2',
+    ),
+    true,
+  );
   const link = parseHtml('<a href="/vacancies?page=2">2</a>');
   assert.strictEqual(hasNext(link, 'https://career.habr.com/vacancies'), true);
 });
 
 test('hasNext: links to another origin or another path do not count', () => {
   const url = 'https://career.habr.com/vacancies';
-  assert.strictEqual(hasNext(parseHtml('<a href="https://evil.example/vacancies?page=2">2</a>'), url), false);
-  assert.strictEqual(hasNext(parseHtml('<a href="/other?page=2">2</a>'), url), false);
+  assert.strictEqual(
+    hasNext(
+      parseHtml('<a href="https://evil.example/vacancies?page=2">2</a>'),
+      url,
+    ),
+    false,
+  );
+  assert.strictEqual(
+    hasNext(parseHtml('<a href="/other?page=2">2</a>'), url),
+    false,
+  );
   assert.strictEqual(hasNext(parseHtml('<a>2</a>'), url), false);
   assert.strictEqual(hasNext(parseHtml('<p>none</p>'), url), false);
 });
@@ -155,9 +214,27 @@ test('hasNext: geekjob style numeric path segment', () => {
   const html = parseHtml('<a href="/vacancies/2">2</a>');
   assert.strictEqual(hasNext(html, 'https://geekjob.ru/vacancies/'), true);
   assert.strictEqual(hasNext(html, 'https://geekjob.ru/vacancies/2'), false);
-  assert.strictEqual(hasNext(parseHtml('<a href="/vacancies/3">3</a>'), 'https://geekjob.ru/vacancies/2'), true);
-  assert.strictEqual(hasNext(parseHtml('<a href="/vacancies?page=5">5</a>'), 'https://geekjob.ru/vacancies/'), false);
-  assert.strictEqual(hasNext(parseHtml('<a href="/vacancy/abc">x</a>'), 'https://geekjob.ru/vacancies/'), false);
+  assert.strictEqual(
+    hasNext(
+      parseHtml('<a href="/vacancies/3">3</a>'),
+      'https://geekjob.ru/vacancies/2',
+    ),
+    true,
+  );
+  assert.strictEqual(
+    hasNext(
+      parseHtml('<a href="/vacancies?page=5">5</a>'),
+      'https://geekjob.ru/vacancies/',
+    ),
+    false,
+  );
+  assert.strictEqual(
+    hasNext(
+      parseHtml('<a href="/vacancy/abc">x</a>'),
+      'https://geekjob.ru/vacancies/',
+    ),
+    false,
+  );
 });
 
 test('legacy: parseHtml falls back to map/lastIndexOf when findLastIndex is unavailable', () => {

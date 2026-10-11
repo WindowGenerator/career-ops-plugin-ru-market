@@ -4,7 +4,11 @@ import { SourceError } from '../lib/errors.mjs';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
-const values = (id, extra = {}) => ({ title: `Job ${id}`, url: `https://career.habr.com/vacancies/${id}`, ...extra });
+const values = (id, extra = {}) => ({
+  title: `Job ${id}`,
+  url: `https://career.habr.com/vacancies/${id}`,
+  ...extra,
+});
 const adapter = (extract, extra = {}) => ({
   source: 'habr-career',
   noValid: 'no valid vacancies',
@@ -105,7 +109,10 @@ test('items that all fail are broken markup with the adapter message', () => {
 
 test('duplicates inside one page are merged', () => {
   const page = parsePage(
-    adapter(() => ({ items: [values(1), values(1), values(2)], hasNext: false })),
+    adapter(() => ({
+      items: [values(1), values(1), values(2)],
+      hasNext: false,
+    })),
     'raw',
   );
   assert.strictEqual(page.jobs.length, 2);
@@ -113,7 +120,9 @@ test('duplicates inside one page are merged', () => {
 
 test('values returning null drops the item', () => {
   const page = parsePage(
-    adapter(() => ({ items: [1, 2], hasNext: false }), { values: n => (n === 1 ? null : values(n)) }),
+    adapter(() => ({ items: [1, 2], hasNext: false }), {
+      values: n => (n === 1 ? null : values(n)),
+    }),
     'raw',
   );
   assert.deepStrictEqual(
@@ -148,7 +157,12 @@ test('hasNext and extras are read after the items are mapped', () => {
 
 test('extra keys returned by extract are carried to the result', () => {
   const page = parsePage(
-    adapter(() => ({ items: [values(1)], hasNext: true, ids: [1], nextOffset: 20 })),
+    adapter(() => ({
+      items: [values(1)],
+      hasNext: true,
+      ids: [1],
+      nextOffset: 20,
+    })),
     'raw',
   );
   assert.deepStrictEqual(page.ids, [1]);
@@ -174,12 +188,15 @@ test('hasNext is coerced to a boolean', () => {
 
 test('finish runs on every makeJob result and may amend the job', () => {
   const page = parsePage(
-    adapter(() => ({ items: [values(1, { flag: true }), values(2)], hasNext: false }), {
-      finish: (job, item) => {
-        if (item.flag) job.note += '; flagged';
-        return job;
+    adapter(
+      () => ({ items: [values(1, { flag: true }), values(2)], hasNext: false }),
+      {
+        finish: (job, item) => {
+          if (item.flag) job.note += '; flagged';
+          return job;
+        },
       },
-    }),
+    ),
     'raw',
   );
   assert.strictEqual(page.jobs[0].note, 'source: habr-career; flagged');
@@ -214,5 +231,7 @@ for (const { name, run } of tests) {
     console.error(`FAIL - ${name}`, error);
   }
 }
-console.log(`${tests.length - failures}/${tests.length} page-pipeline tests passed`);
+console.log(
+  `${tests.length - failures}/${tests.length} page-pipeline tests passed`,
+);
 process.exitCode = failures ? 1 : 0;

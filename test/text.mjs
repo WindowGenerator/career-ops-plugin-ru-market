@@ -1,5 +1,11 @@
 import assert from 'node:assert';
-import { clean, decode, plainText, normalizedText, normalizedCompany } from '../lib/processors/normalize.mjs';
+import {
+  clean,
+  decode,
+  plainText,
+  normalizedText,
+  normalizedCompany,
+} from '../lib/processors/normalize.mjs';
 import { SourceError, categoryOf } from '../lib/errors.mjs';
 
 const tests = [];
@@ -13,14 +19,23 @@ test('clean: collapses whitespace, trims, and returns empty string for non-strin
 });
 
 test('decode: named, decimal and hex entities', () => {
-  assert.strictEqual(decode('a &amp; b &lt;c&gt; &quot;d&quot; &apos;e&apos;'), `a & b <c> "d" 'e'`);
-  assert.strictEqual(decode('&laquo;x&raquo; &ndash; &mdash; &rub;'), '«x» – — ₽');
+  assert.strictEqual(
+    decode('a &amp; b &lt;c&gt; &quot;d&quot; &apos;e&apos;'),
+    `a & b <c> "d" 'e'`,
+  );
+  assert.strictEqual(
+    decode('&laquo;x&raquo; &ndash; &mdash; &rub;'),
+    '«x» – — ₽',
+  );
   assert.strictEqual(decode('&#65;&#x42;&#X43;'), 'ABC');
   assert.strictEqual(decode('&AMP;'), '&');
 });
 
 test('decode: unknown names and invalid code points stay as written', () => {
-  assert.strictEqual(decode('&unknown; &#0; &#xD800; &#1114112;'), '&unknown; &#0; &#xD800; &#1114112;');
+  assert.strictEqual(
+    decode('&unknown; &#0; &#xD800; &#1114112;'),
+    '&unknown; &#0; &#xD800; &#1114112;',
+  );
   assert.strictEqual(decode('no entities & here'), 'no entities & here');
   assert.strictEqual(decode(undefined), '');
   assert.strictEqual(decode(null), '');
@@ -31,14 +46,18 @@ test('decode: nbsp entity becomes an ordinary space', () => {
 });
 
 test('plainText: strips tags, script and style, decodes entities, collapses space', () => {
-  const html = '<p>Hello&nbsp;<b>world</b></p><script>alert(1)</script><style>p{}</style>!';
+  const html =
+    '<p>Hello&nbsp;<b>world</b></p><script>alert(1)</script><style>p{}</style>!';
   assert.strictEqual(plainText(html), 'Hello world !');
   assert.strictEqual(plainText(undefined), '');
   assert.strictEqual(plainText('a &lt;b&gt; c'), 'a <b> c');
 });
 
 test('normalizedText: NFKC, lower case, quotes and punctuation removed', () => {
-  assert.strictEqual(normalizedText('  «Senior»  Python-Developer, (Remote)! '), 'senior python-developer remote');
+  assert.strictEqual(
+    normalizedText('  «Senior»  Python-Developer, (Remote)! '),
+    'senior python-developer remote',
+  );
   assert.strictEqual(normalizedText('ＡＢＣ'), 'abc');
   assert.strictEqual(normalizedText(undefined), '');
 });
@@ -69,7 +88,10 @@ test('SourceError: carries category, message and cause', () => {
 });
 
 test('categoryOf: explicit category wins over everything else', () => {
-  assert.strictEqual(categoryOf(Object.assign(new Error('HTTP 500'), { category: 'config' })), 'config');
+  assert.strictEqual(
+    categoryOf(Object.assign(new Error('HTTP 500'), { category: 'config' })),
+    'config',
+  );
 });
 
 test('categoryOf: HTTP status from status, response.status or message', () => {
@@ -78,21 +100,39 @@ test('categoryOf: HTTP status from status, response.status or message', () => {
   assert.strictEqual(categoryOf({ response: { status: 403 } }), 'access');
   assert.strictEqual(categoryOf({ status: 503 }), 'server');
   assert.strictEqual(categoryOf({ status: 404 }), 'http');
-  assert.strictEqual(categoryOf(new Error('Request failed: HTTP 502 bad gateway')), 'server');
+  assert.strictEqual(
+    categoryOf(new Error('Request failed: HTTP 502 bad gateway')),
+    'server',
+  );
   assert.strictEqual(categoryOf(new Error('http 418')), 'http');
 });
 
 test('categoryOf: SyntaxError is broken markup', () => {
-  assert.strictEqual(categoryOf(new SyntaxError('Unexpected token')), 'broken-markup');
+  assert.strictEqual(
+    categoryOf(new SyntaxError('Unexpected token')),
+    'broken-markup',
+  );
 });
 
 test('categoryOf: message patterns for access and network failures', () => {
   assert.strictEqual(categoryOf(new Error('captcha shown')), 'access');
-  assert.strictEqual(categoryOf(new Error('egress blocked by policy')), 'access');
+  assert.strictEqual(
+    categoryOf(new Error('egress blocked by policy')),
+    'access',
+  );
   assert.strictEqual(categoryOf(new Error('fetch failed')), 'network');
-  assert.strictEqual(categoryOf(Object.assign(new Error('x'), { name: 'AbortError' })), 'network');
-  assert.strictEqual(categoryOf(Object.assign(new Error('x'), { code: 'ECONNRESET' })), 'network');
-  assert.strictEqual(categoryOf(Object.assign(new Error('x'), { code: 'OTHER' })), 'unknown');
+  assert.strictEqual(
+    categoryOf(Object.assign(new Error('x'), { name: 'AbortError' })),
+    'network',
+  );
+  assert.strictEqual(
+    categoryOf(Object.assign(new Error('x'), { code: 'ECONNRESET' })),
+    'network',
+  );
+  assert.strictEqual(
+    categoryOf(Object.assign(new Error('x'), { code: 'OTHER' })),
+    'unknown',
+  );
 });
 
 test('categoryOf: nullish and unrecognised inputs are unknown', () => {
@@ -102,7 +142,10 @@ test('categoryOf: nullish and unrecognised inputs are unknown', () => {
 });
 
 test('legacy: status 0 or NaN does not classify as http, message patterns still apply', () => {
-  assert.strictEqual(categoryOf({ status: 'abc', message: 'timeout while reading' }), 'network');
+  assert.strictEqual(
+    categoryOf({ status: 'abc', message: 'timeout while reading' }),
+    'network',
+  );
 });
 
 let failures = 0;

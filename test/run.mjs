@@ -6,7 +6,13 @@ import { parseGeekjob } from '../lib/providers/geekjob.mjs';
 import { parseSuperjob } from '../lib/providers/superjob.mjs';
 import { parseTrudvsem } from '../lib/providers/trudvsem.mjs';
 import { parseConfig, DEFAULT_SOURCES, SOURCES } from '../lib/config.mjs';
-import { parseDate, parseSalary, jobUrl, normalizedCompany, structuredSalary } from '../lib/processors/normalize.mjs';
+import {
+  parseDate,
+  parseSalary,
+  jobUrl,
+  normalizedCompany,
+  structuredSalary,
+} from '../lib/processors/normalize.mjs';
 import { deduplicate } from '../lib/processors/dedup.mjs';
 import { withRetry, retryAfterMs } from '../lib/transport/retry.mjs';
 import { createQueue, enqueue } from '../lib/transport/queue.mjs';
@@ -16,13 +22,19 @@ import { checkHealth } from '../scripts/health.mjs';
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
 const fixture = (source, name = 'normal') =>
-  readFileSync(new URL(`../fixtures/${source}/${name}.html`, import.meta.url), 'utf8');
+  readFileSync(
+    new URL(`../fixtures/${source}/${name}.html`, import.meta.url),
+    'utf8',
+  );
 const parsers = { 'habr-career': parseHabr, geekjob: parseGeekjob };
 const parse = (source, name) => parsers[source](fixture(source, name));
-const config = (source, max_pages = 2) => parseConfig({ ru_market: { source, max_pages } }).sources[source];
+const config = (source, max_pages = 2) =>
+  parseConfig({ ru_market: { source, max_pages } }).sources[source];
 const ctxFor = run => ({ fetchText: run, fetchJson: run, log() {} });
-const httpError = status => Object.assign(new Error(`HTTP ${status}`), { status });
-const sourceFor = url => (url.includes('career.habr.com') ? 'habr-career' : 'geekjob');
+const httpError = status =>
+  Object.assign(new Error(`HTTP ${status}`), { status });
+const sourceFor = url =>
+  url.includes('career.habr.com') ? 'habr-career' : 'geekjob';
 
 for (const source of DEFAULT_SOURCES) {
   test(`${source}: normal contract and salary`, () => {
@@ -31,15 +43,22 @@ for (const source of DEFAULT_SOURCES) {
     assert.strictEqual(hasNext, true);
     assert.strictEqual(
       jobs[0].postedAt,
-      source === 'geekjob' ? Date.parse('2026-09-25T00:00:00+03:00') : Date.parse('2026-09-25T10:30:00+03:00'),
+      source === 'geekjob'
+        ? Date.parse('2026-09-25T00:00:00+03:00')
+        : Date.parse('2026-09-25T10:30:00+03:00'),
     );
-    assert.deepStrictEqual(jobs[0].salary, { min: 250000, max: 350000, currency: 'RUB' });
+    assert.deepStrictEqual(jobs[0].salary, {
+      min: 250000,
+      max: 350000,
+      currency: 'RUB',
+    });
     assert.match(jobs[0].location, /только из РФ/);
     assert.match(jobs[0].note, /net|на руки/);
     assert(!jobs[0].url.includes('?'));
     assert(!('sourceDetail' in jobs[0]));
   });
-  test(`${source}: valid empty`, () => assert.deepStrictEqual(parse(source, 'empty').jobs, []));
+  test(`${source}: valid empty`, () =>
+    assert.deepStrictEqual(parse(source, 'empty').jobs, []));
   test(`${source}: broken markup`, () =>
     assert.throws(
       () => parse(source, 'broken'),
@@ -62,7 +81,8 @@ for (const source of DEFAULT_SOURCES) {
     );
     assert.strictEqual(jobs.length, 2);
     assert.strictEqual(urls.length, 2);
-    if (source === 'geekjob') assert.strictEqual(urls[1], 'https://geekjob.ru/vacancies/2');
+    if (source === 'geekjob')
+      assert.strictEqual(urls[1], 'https://geekjob.ru/vacancies/2');
   });
   test(`${source}: duplicate cards/pages`, async () => {
     const jobs = await adapters[source](
@@ -97,7 +117,14 @@ for (const source of DEFAULT_SOURCES) {
     assert.strictEqual(jobs.length, 1);
     assert.strictEqual(count, 4);
     assert.deepStrictEqual(warnings.map(JSON.parse), [
-      { source, completed_pages: 1, failed_page: 2, query_index: 1, http_status: 503, category: 'server' },
+      {
+        source,
+        completed_pages: 1,
+        failed_page: 2,
+        query_index: 1,
+        http_status: 503,
+        category: 'server',
+      },
     ]);
   });
   test(`${source}: access failures are not retried`, async () => {
@@ -116,7 +143,8 @@ for (const source of DEFAULT_SOURCES) {
   test(`${source}: missing optional fields`, () => {
     let value = fixture(source);
     if (source === 'habr-career')
-      value = '<div class="vacancy-card"><a class="vacancy-card__title-link" href="/vacancies/203">Engineer</a></div>';
+      value =
+        '<div class="vacancy-card"><a class="vacancy-card__title-link" href="/vacancies/203">Engineer</a></div>';
     else
       value =
         '<ul class="serp-list" id="serplist"><li class="collection-item avatar"><a class="title" href="/vacancy/000000000000000000000303">Engineer</a></li></ul>';
@@ -160,11 +188,20 @@ test('primary source override', () => {
   );
 });
 test('medium confidence preserves reciprocal links', () => {
-  const jobs = DEFAULT_SOURCES.flatMap(s => parse(s).jobs).map(j => ({ ...j, description: '' }));
+  const jobs = DEFAULT_SOURCES.flatMap(s => parse(s).jobs).map(j => ({
+    ...j,
+    description: '',
+  }));
   const result = deduplicate(jobs);
   assert.strictEqual(result.length, 2);
-  assert(result[0].note.includes(`possible cross-listing: GeekJob ${result[1].url}`));
-  assert(result[1].note.includes(`possible cross-listing: Habr Career ${result[0].url}`));
+  assert(
+    result[0].note.includes(`possible cross-listing: GeekJob ${result[1].url}`),
+  );
+  assert(
+    result[1].note.includes(
+      `possible cross-listing: Habr Career ${result[0].url}`,
+    ),
+  );
 });
 test('same title/company different locations, teams or salaries never merge', () => {
   const [a, b] = DEFAULT_SOURCES.flatMap(s => parse(s).jobs);
@@ -180,11 +217,19 @@ test('same title/company different locations, teams or salaries never merge', ()
     assert.strictEqual(result.length, 2);
     assert(!result[0].note.includes('cross-listing'));
   }
-  assert.strictEqual(deduplicate([a, { ...a, url: 'https://career.habr.com/vacancies/999' }]).length, 2);
+  assert.strictEqual(
+    deduplicate([a, { ...a, url: 'https://career.habr.com/vacancies/999' }])
+      .length,
+    2,
+  );
 });
 test('complete-link grouping prevents merging distinct same-board vacancies', () => {
   const [a, b] = DEFAULT_SOURCES.flatMap(s => parse(s).jobs);
-  const result = deduplicate([a, b, { ...b, url: 'https://geekjob.ru/vacancy/000000000000000000000999' }]);
+  const result = deduplicate([
+    a,
+    b,
+    { ...b, url: 'https://geekjob.ru/vacancy/000000000000000000000999' },
+  ]);
   assert.strictEqual(result.length, 2);
 });
 test('one failed source preserves other results', async () => {
@@ -204,7 +249,12 @@ test('one failed source preserves other results', async () => {
   assert.match(jobs[0].url, /geekjob/);
   assert(!('sourceStatuses' in jobs) && !('queryStatuses' in jobs));
   assert(
-    logs.some(entry => entry.source === 'habr-career' && entry.status === 'failed' && entry.category === 'access'),
+    logs.some(
+      entry =>
+        entry.source === 'habr-career' &&
+        entry.status === 'failed' &&
+        entry.category === 'access',
+    ),
   );
 });
 test('all failed sources is an error, not empty', async () => {
@@ -221,7 +271,12 @@ test('all failed sources is an error, not empty', async () => {
 test('disabled source makes no requests', async () => {
   const urls = [];
   await plugin.provider.fetch(
-    { ru_market: { source: 'all', sources: { habr_career: { enabled: false } } } },
+    {
+      ru_market: {
+        source: 'all',
+        sources: { habr_career: { enabled: false } },
+      },
+    },
     ctxFor(async url => {
       urls.push(url);
       return fixture('geekjob');
@@ -250,7 +305,11 @@ test('strict configuration and precedence', () => {
     );
   }
   const cfg = parseConfig({
-    ru_market: { max_pages: 3, future_field: 'ignored', sources: { habr_career: { max_pages: 2 } } },
+    ru_market: {
+      max_pages: 3,
+      future_field: 'ignored',
+      sources: { habr_career: { max_pages: 2 } },
+    },
   });
   assert.strictEqual(cfg.sources['habr-career'].max_pages, 2);
   assert.strictEqual(cfg.sources.geekjob.max_pages, 3);
@@ -260,20 +319,52 @@ test('localized date validation, timezone, year rollover; unknown dates omitted'
     parseDate('31 декабря', Date.parse('2026-01-02T00:00:00Z')),
     Date.parse('2025-12-31T00:00:00+03:00'),
   );
-  assert.strictEqual(parseDate('Опубликовано 5 января 2024'), Date.parse('2024-01-05T00:00:00+03:00'));
-  for (const value of ['', 'вчера', 'Обновлено 5 января 2024', '31 февраля 2026', '2026-02-30', '2026-01-01T12:00:00'])
+  assert.strictEqual(
+    parseDate('Опубликовано 5 января 2024'),
+    Date.parse('2024-01-05T00:00:00+03:00'),
+  );
+  for (const value of [
+    '',
+    'вчера',
+    'Обновлено 5 января 2024',
+    '31 февраля 2026',
+    '2026-02-30',
+    '2026-01-01T12:00:00',
+  ])
     assert.strictEqual(parseDate(value), undefined);
-  const geek = parseGeekjob(fixture('geekjob').replace('itemprop="datePosted"', '').replace('Опубликовано ', ''));
+  const geek = parseGeekjob(
+    fixture('geekjob')
+      .replace('itemprop="datePosted"', '')
+      .replace('Опубликовано ', ''),
+  );
   assert(!('postedAt' in geek.jobs[0]));
-  const habr = parseHabr(fixture('habr-career').replace('>25 сентября</time>', '>Обновлено 25 сентября</time>'));
+  const habr = parseHabr(
+    fixture('habr-career').replace(
+      '>25 сентября</time>',
+      '>Обновлено 25 сентября</time>',
+    ),
+  );
   assert(!('postedAt' in habr.jobs[0]));
 });
 test('salary variants and predicted salary', () => {
-  assert.deepStrictEqual(parseSalary('до 4 000 USD gross'), { max: 4000, currency: 'USD' });
-  assert.deepStrictEqual(parseSalary('от 250 тыс. руб. на руки'), { min: 250000, currency: 'RUB' });
-  assert.deepStrictEqual(parseSalary('3.5k — 4k € / месяц'), { min: 3500, max: 4000, currency: 'EUR' });
+  assert.deepStrictEqual(parseSalary('до 4 000 USD gross'), {
+    max: 4000,
+    currency: 'USD',
+  });
+  assert.deepStrictEqual(parseSalary('от 250 тыс. руб. на руки'), {
+    min: 250000,
+    currency: 'RUB',
+  });
+  assert.deepStrictEqual(parseSalary('3.5k — 4k € / месяц'), {
+    min: 3500,
+    max: 4000,
+    currency: 'EUR',
+  });
   assert.strictEqual(parseSalary('по договорённости'), undefined);
-  const text = fixture('habr-career').replace('class="basic-salary"', 'class="predicted-salary"');
+  const text = fixture('habr-career').replace(
+    'class="basic-salary"',
+    'class="predicted-salary"',
+  );
   const predicted = parseHabr(text).jobs[0];
   assert.strictEqual(predicted.salary, undefined);
   assert(!predicted.note.includes('salary:'));
@@ -294,8 +385,14 @@ test('Habr company rating and market salary do not enter job data', () => {
   assert.strictEqual(job.note, 'source: habr-career');
 });
 test('company preserves original and does not transliterate', () => {
-  assert.strictEqual(normalizedCompany('ООО «Тестовая компания»'), 'тестовая компания');
-  assert.notStrictEqual(normalizedCompany('Яндекс'), normalizedCompany('Yandex'));
+  assert.strictEqual(
+    normalizedCompany('ООО «Тестовая компания»'),
+    'тестовая компания',
+  );
+  assert.notStrictEqual(
+    normalizedCompany('Яндекс'),
+    normalizedCompany('Yandex'),
+  );
   assert.strictEqual(parse('geekjob').jobs[0].company, 'Тестовая компания');
 });
 test('egress guard rejects private/action/foreign URLs', () => {
@@ -320,7 +417,9 @@ test('egress guard rejects private/action/foreign URLs', () => {
 test('retry policy and bounded Retry-After', async () => {
   const delays = [];
   let calls = 0;
-  const error = Object.assign(httpError(429), { headers: { 'retry-after': '99999999' } });
+  const error = Object.assign(httpError(429), {
+    headers: { 'retry-after': '99999999' },
+  });
   await withRetry(
     async () => {
       if (++calls < 3) throw error;
@@ -330,8 +429,15 @@ test('retry policy and bounded Retry-After', async () => {
   );
   assert.deepStrictEqual(delays, [10000, 10000]);
   assert.strictEqual(retryAfterMs({ retryAfter: 'invalid' }), 0);
-  assert.strictEqual(retryAfterMs({ retryAfter: 'Thu, 01 Jan 1970 00:00:03 GMT' }, 1000), 2000);
-  for (const error of [httpError(400), new SyntaxError('bad JSON'), new Error('parser bug')]) {
+  assert.strictEqual(
+    retryAfterMs({ retryAfter: 'Thu, 01 Jan 1970 00:00:03 GMT' }, 1000),
+    2000,
+  );
+  for (const error of [
+    httpError(400),
+    new SyntaxError('bad JSON'),
+    new Error('parser bug'),
+  ]) {
     let calls = 0;
     await assert.rejects(
       withRetry(
@@ -403,7 +509,10 @@ test('host queues are independent and removed hosts are unsupported', async () =
   assert(otherRan);
   release();
   await blocked;
-  assert.throws(() => enqueue('api.hh.ru', async () => {}), /Unsupported request host/);
+  assert.throws(
+    () => enqueue('api.hh.ru', async () => {}),
+    /Unsupported request host/,
+  );
 });
 test('health is one page/request per source, no vacancy payloads', async () => {
   const calls = [];
@@ -458,7 +567,8 @@ const trudvsemPage = (total = 1) => ({
         vacancy: {
           id: 'c50d9cd8-bbe3-11f1-9a11-2f8460579df4',
           'job-name': 'Python engineer',
-          vac_url: 'https://trudvsem.ru/vacancy/card/1227700702074/c50d9cd8-bbe3-11f1-9a11-2f8460579df4?utm=x',
+          vac_url:
+            'https://trudvsem.ru/vacancy/card/1227700702074/c50d9cd8-bbe3-11f1-9a11-2f8460579df4?utm=x',
           company: { name: 'ООО Тест' },
           region: { name: 'Самарская область' },
           addresses: { address: [{ location: 'Тольятти' }] },
@@ -476,14 +586,29 @@ const trudvsemPage = (total = 1) => ({
 test('new sources are opt-in and legacy precedence remains valid', () => {
   const defaultCfg = parseConfig({ ru_market: { source: 'all' } });
   assert.deepStrictEqual(defaultCfg.selected, DEFAULT_SOURCES);
-  assert.deepStrictEqual(defaultCfg.order, [...DEFAULT_SOURCES, 'superjob', 'trudvsem', 'getmatch', 'helloworld-rs']);
+  assert.deepStrictEqual(defaultCfg.order, [
+    ...DEFAULT_SOURCES,
+    'superjob',
+    'trudvsem',
+    'getmatch',
+    'helloworld-rs',
+  ]);
   assert.deepStrictEqual(
-    parseConfig({ ru_market: { source: 'all', sources: { superjob: { enabled: true }, trudvsem: { enabled: true } } } })
-      .selected,
+    parseConfig({
+      ru_market: {
+        source: 'all',
+        sources: { superjob: { enabled: true }, trudvsem: { enabled: true } },
+      },
+    }).selected,
     [...DEFAULT_SOURCES, 'superjob', 'trudvsem'],
   );
   assert.deepStrictEqual(
-    parseConfig({ ru_market: { source: 'superjob', sources: { superjob: { enabled: true } } } }).selected,
+    parseConfig({
+      ru_market: {
+        source: 'superjob',
+        sources: { superjob: { enabled: true } },
+      },
+    }).selected,
     ['superjob'],
   );
   assert.throws(
@@ -491,24 +616,42 @@ test('new sources are opt-in and legacy precedence remains valid', () => {
     e => e.category === 'config',
   );
   assert.throws(
-    () => parseConfig({ ru_market: { sources: { superjob: { mode: 'html' } } } }),
+    () =>
+      parseConfig({ ru_market: { sources: { superjob: { mode: 'html' } } } }),
     e => e.category === 'config',
   );
 });
 test('salary has min/max/currency only and compensation carries the units', () => {
   const [habr, geek] = DEFAULT_SOURCES.map(s => parse(s).jobs[0]);
   for (const job of [habr, geek]) {
-    assert.deepStrictEqual(Object.keys(job.salary).sort(), ['currency', 'max', 'min']);
+    assert.deepStrictEqual(Object.keys(job.salary).sort(), [
+      'currency',
+      'max',
+      'min',
+    ]);
     assert.deepStrictEqual(
-      { min: job.compensation.min, max: job.compensation.max, currency: job.compensation.currency },
+      {
+        min: job.compensation.min,
+        max: job.compensation.max,
+        currency: job.compensation.currency,
+      },
       job.salary,
     );
   }
   assert.strictEqual(habr.compensation.period, 'month');
   assert.strictEqual(habr.compensation.taxBasis, 'net');
-  assert.deepStrictEqual(structuredSalary({ from: 1, to: 2, currency: 'RUR' }), { min: 1, max: 2, currency: 'RUB' });
-  assert.deepStrictEqual(structuredSalary({ min: 5, currency: 'USD' }), { min: 5, currency: 'USD' });
-  assert.strictEqual(structuredSalary({ min: 5, max: 1, currency: 'USD' }), undefined);
+  assert.deepStrictEqual(
+    structuredSalary({ from: 1, to: 2, currency: 'RUR' }),
+    { min: 1, max: 2, currency: 'RUB' },
+  );
+  assert.deepStrictEqual(structuredSalary({ min: 5, currency: 'USD' }), {
+    min: 5,
+    currency: 'USD',
+  });
+  assert.strictEqual(
+    structuredSalary({ min: 5, max: 1, currency: 'USD' }),
+    undefined,
+  );
 });
 test('hh configuration is rejected with a migration hint and removed hosts are gone', () => {
   for (const raw of [
@@ -520,22 +663,29 @@ test('hh configuration is rejected with a migration hint and removed hosts are g
   ]) {
     assert.throws(
       () => parseConfig({ ru_market: raw }),
-      e => e.category === 'config' && /local-parser/.test(e.message) && /0\.7\.0/.test(e.message),
+      e =>
+        e.category === 'config' &&
+        /local-parser/.test(e.message) &&
+        /0\.7\.0/.test(e.message),
     );
   }
   assert(!('hh' in adapters));
   assert.strictEqual(jobUrl('https://hh.ru/vacancy/1', 'hh'), undefined);
   assert.throws(() => assertRequestUrl('https://api.hh.ru/vacancies'));
-  const manifest = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+  const manifest = JSON.parse(
+    readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'),
+  );
   assert(!manifest.allowedHosts.includes('api.hh.ru'));
   assert(!manifest.optionalEnv.includes('HH_ACCESS_TOKEN'));
 });
 test('primary_source_order accepts lengths 2/4/5/6 and rejects the previous 3 and 7', () => {
   for (const n of [2, 4, 5, 6])
-    assert.deepStrictEqual(parseConfig({ ru_market: { primary_source_order: SOURCES.slice(0, n).reverse() } }).order, [
-      ...SOURCES.slice(0, n).reverse(),
-      ...SOURCES.slice(n),
-    ]);
+    assert.deepStrictEqual(
+      parseConfig({
+        ru_market: { primary_source_order: SOURCES.slice(0, n).reverse() },
+      }).order,
+      [...SOURCES.slice(0, n).reverse(), ...SOURCES.slice(n)],
+    );
   for (const order of [
     [...SOURCES.slice(0, 2), 'superjob'],
     ['hh', ...SOURCES.slice(0, 2)],
@@ -564,7 +714,11 @@ test('all-source scan makes no HH requests', async () => {
 test('SuperJob parses public listing and sends application key only to its API', async () => {
   const parsed = parseSuperjob(superjobPage());
   assert.strictEqual(parsed.jobs.length, 1);
-  assert.deepStrictEqual(parsed.jobs[0].salary, { min: 250000, max: 350000, currency: 'RUB' });
+  assert.deepStrictEqual(parsed.jobs[0].salary, {
+    min: 250000,
+    max: 350000,
+    currency: 'RUB',
+  });
   assert(!parsed.jobs[0].url.includes('?'));
   assert.strictEqual(parsed.jobs[0].postedAt, 1780000000000);
   const seen = [];
@@ -572,7 +726,9 @@ test('SuperJob parses public listing and sends application key only to its API',
     ru_market: {
       source: 'superjob',
       max_pages: 2,
-      sources: { superjob: { enabled: true, queries: ['python'], per_page: 1 } },
+      sources: {
+        superjob: { enabled: true, queries: ['python'], per_page: 1 },
+      },
     },
   }).sources.superjob;
   const jobs = await adapters.superjob(cfg, {
@@ -586,7 +742,10 @@ test('SuperJob parses public listing and sends application key only to its API',
   assert.strictEqual(jobs.length, 1);
   assert.strictEqual(seen.length, 2);
   assert.strictEqual(new URL(seen[1].url).searchParams.get('page'), '1');
-  assert.strictEqual(new URL(seen[0].url).searchParams.get('keyword'), 'python');
+  assert.strictEqual(
+    new URL(seen[0].url).searchParams.get('keyword'),
+    'python',
+  );
   assert.strictEqual(seen[0].headers['X-Api-App-Id'], 'test-key');
   await assert.rejects(
     adapters.superjob(
@@ -603,7 +762,11 @@ test('SuperJob parses public listing and sends application key only to its API',
 test('Работа России parses listing and advances offset', async () => {
   const parsed = parseTrudvsem(trudvsemPage());
   assert.strictEqual(parsed.jobs.length, 1);
-  assert.deepStrictEqual(parsed.jobs[0].salary, { min: 90000, max: 100000, currency: 'RUB' });
+  assert.deepStrictEqual(parsed.jobs[0].salary, {
+    min: 90000,
+    max: 100000,
+    currency: 'RUB',
+  });
   assert.strictEqual(parsed.jobs[0].location, 'Тольятти');
   assert(!parsed.jobs[0].url.includes('?'));
   const seen = [];
@@ -611,7 +774,9 @@ test('Работа России parses listing and advances offset', async () =>
     ru_market: {
       source: 'trudvsem',
       max_pages: 2,
-      sources: { trudvsem: { enabled: true, queries: ['python'], per_page: 100 } },
+      sources: {
+        trudvsem: { enabled: true, queries: ['python'], per_page: 100 },
+      },
     },
   }).sources.trudvsem;
   const jobs = await adapters.trudvsem(
@@ -643,7 +808,13 @@ test('Работа России partial server error reports safe request coordi
     ru_market: {
       source: 'trudvsem',
       max_pages: 2,
-      sources: { trudvsem: { enabled: true, queries: ['private search text'], per_page: 1 } },
+      sources: {
+        trudvsem: {
+          enabled: true,
+          queries: ['private search text'],
+          per_page: 1,
+        },
+      },
     },
   };
   const jobs = await plugin.provider.fetch(entry, {
@@ -674,15 +845,24 @@ test('employment and professional_role are explicit source labels, unknown other
     catalogues: [{ id: 33, title: 'Информационные технологии' }, { title: '' }],
   });
   const [job] = parseSuperjob(sj).jobs;
-  assert.deepStrictEqual(job.employment, { values: ['full'], rawLabels: ['Полная занятость'] });
-  assert.deepStrictEqual(job.professional_role, { values: [], rawLabels: ['Информационные технологии'] });
+  assert.deepStrictEqual(job.employment, {
+    values: ['full'],
+    rawLabels: ['Полная занятость'],
+  });
+  assert.deepStrictEqual(job.professional_role, {
+    values: [],
+    rawLabels: ['Информационные технологии'],
+  });
   const tv = trudvsemPage();
   Object.assign(tv.results.vacancies[0].vacancy, {
     employment: 'Проектная работа',
     category: { specialisation: 'Образование' },
   });
   const [work] = parseTrudvsem(tv).jobs;
-  assert.deepStrictEqual(work.employment, { values: ['project'], rawLabels: ['Проектная работа'] });
+  assert.deepStrictEqual(work.employment, {
+    values: ['project'],
+    rawLabels: ['Проектная работа'],
+  });
   assert.deepStrictEqual(work.professional_role.rawLabels, ['Образование']);
   for (const unknown of [
     parseSuperjob(superjobPage()).jobs[0],
@@ -694,7 +874,10 @@ test('employment and professional_role are explicit source labels, unknown other
   }
 });
 test('new sources enforce listing and vacancy URL boundaries', () => {
-  for (const url of ['https://api.superjob.ru/2.0/vacancies/', 'https://opendata.trudvsem.ru/api/v1/vacancies'])
+  for (const url of [
+    'https://api.superjob.ru/2.0/vacancies/',
+    'https://opendata.trudvsem.ru/api/v1/vacancies',
+  ])
     assertRequestUrl(url);
   for (const url of [
     'https://api.superjob.ru/2.0/resumes/',
@@ -703,8 +886,14 @@ test('new sources enforce listing and vacancy URL boundaries', () => {
     'https://api.superjob.ru:444/2.0/vacancies/',
   ])
     assert.throws(() => assertRequestUrl(url));
-  assert.strictEqual(jobUrl('https://evil.example/vakansii/engineer-123.html', 'superjob'), undefined);
-  assert.strictEqual(jobUrl('https://trudvsem.ru/company/123', 'trudvsem'), undefined);
+  assert.strictEqual(
+    jobUrl('https://evil.example/vakansii/engineer-123.html', 'superjob'),
+    undefined,
+  );
+  assert.strictEqual(
+    jobUrl('https://trudvsem.ru/company/123', 'trudvsem'),
+    undefined,
+  );
 });
 
 let failures = 0;

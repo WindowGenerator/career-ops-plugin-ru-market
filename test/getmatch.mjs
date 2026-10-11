@@ -6,17 +6,28 @@ import plugin, { adapters } from '../index.mjs';
 import { parseGetmatch } from '../lib/providers/getmatch.mjs';
 import { parseConfig, SOURCES, DEFAULT_SOURCES } from '../lib/config.mjs';
 import { jobUrl } from '../lib/processors/normalize.mjs';
-import { deduplicate, localDedup, confidence } from '../lib/processors/dedup.mjs';
+import {
+  deduplicate,
+  localDedup,
+  confidence,
+} from '../lib/processors/dedup.mjs';
 import { assertRequestUrl } from '../lib/transport/http.mjs';
 import { paginate } from '../lib/processors/paginate.mjs';
 import { checkHealth } from '../scripts/health.mjs';
-const fixture = () => JSON.parse(readFileSync(new URL('../fixtures/getmatch/normal.json', import.meta.url)));
+const fixture = () =>
+  JSON.parse(
+    readFileSync(new URL('../fixtures/getmatch/normal.json', import.meta.url)),
+  );
 const entry = {
-  ru_market: { source: 'getmatch', sources: { getmatch: { enabled: true, max_pages: 3, per_page: 1 } } },
+  ru_market: {
+    source: 'getmatch',
+    sources: { getmatch: { enabled: true, max_pages: 3, per_page: 1 } },
+  },
 };
 const cfg = () => parseConfig(entry).sources.getmatch;
 const ctx = fetchJson => ({ fetchJson, log() {} });
-const statusError = status => Object.assign(new Error(`HTTP ${status}`), { status });
+const statusError = status =>
+  Object.assign(new Error(`HTTP ${status}`), { status });
 const page = (offset, id = 602) => {
   const data = fixture();
   data.meta.offset = offset;
@@ -29,16 +40,28 @@ test('getmatch: only ordinary active vacancies and allowed metadata', () => {
   const { jobs, hasNext } = parseGetmatch(fixture());
   assert.equal(jobs.length, 1);
   assert.equal(hasNext, true);
-  assert.equal(jobs[0].url, 'https://getmatch.ru/vacancies/601-python-platform-engineer');
+  assert.equal(
+    jobs[0].url,
+    'https://getmatch.ru/vacancies/601-python-platform-engineer',
+  );
   assert.equal(jobs[0].company, 'Synthetic Platform');
   assert.match(jobs[0].location, /Россия.*Удалённо/);
-  assert.deepEqual(jobs[0].salary, { min: 250000, max: 350000, currency: 'RUB' });
+  assert.deepEqual(jobs[0].salary, {
+    min: 250000,
+    max: 350000,
+    currency: 'RUB',
+  });
   assert.match(jobs[0].note, /salary taxes: net/);
   assert.equal(jobs[0].postedAt, Date.parse('2026-10-07T10:00:00+03:00'));
   assert(!('application' in jobs[0]));
   assert(!('description' in jobs[0]));
   const data = fixture();
-  data.offers.push({ ...data.offers[1], id: 603, url: '/vacancies/603-archived', is_active: false });
+  data.offers.push({
+    ...data.offers[1],
+    id: 603,
+    url: '/vacancies/603-archived',
+    is_active: false,
+  });
   data.offers.push({ offer_type: 'unknown_promotion' });
   assert.equal(parseGetmatch(data).jobs.length, 1);
 });
@@ -56,15 +79,26 @@ test('getmatch: hidden, estimated, missing currency, incognito and naive date', 
       assert(!parseGetmatch(data).jobs[0].note.includes('250000'));
   }
   const data = fixture();
-  Object.assign(data.offers[1], { incognito_publication: true, published_at: '2026-10-07T10:00:00' });
-  data.offers[1].location_items.push({ label: 'США', format: 'remote', exclude: true });
+  Object.assign(data.offers[1], {
+    incognito_publication: true,
+    published_at: '2026-10-07T10:00:00',
+  });
+  data.offers[1].location_items.push({
+    label: 'США',
+    format: 'remote',
+    exclude: true,
+  });
   const job = parseGetmatch(data).jobs[0];
   assert.equal(job.company, '');
   assert.equal(job.postedAt, undefined);
   assert.match(job.location, /Исключено: США/);
 });
 test('getmatch: broken schema differs from valid empty and ID must match URL', () => {
-  assert.deepEqual(parseGetmatch({ offers: [], meta: { total: 0, offset: 0, limit: 20 } }).jobs, []);
+  assert.deepEqual(
+    parseGetmatch({ offers: [], meta: { total: 0, offset: 0, limit: 20 } })
+      .jobs,
+    [],
+  );
   for (const data of [
     {},
     { offers: [], meta: { total: '1', offset: 0, limit: 1 } },
@@ -100,14 +134,28 @@ test('getmatch: stable numeric identity across slug changes, distinct IDs stay s
 });
 test('getmatch: opt-in and backward-compatible source orders', () => {
   assert.deepEqual(parseConfig({ ru_market: {} }).selected, DEFAULT_SOURCES);
-  assert.throws(() => parseConfig({ ru_market: { source: 'getmatch' } }), /No enabled/);
-  for (const order of [DEFAULT_SOURCES, SOURCES.slice(0, 5), [...SOURCES].reverse()]) {
+  assert.throws(
+    () => parseConfig({ ru_market: { source: 'getmatch' } }),
+    /No enabled/,
+  );
+  for (const order of [
+    DEFAULT_SOURCES,
+    SOURCES.slice(0, 5),
+    [...SOURCES].reverse(),
+  ]) {
     const parsed = parseConfig({ ru_market: { primary_source_order: order } });
     assert.deepEqual(parsed.order.slice(0, order.length), order);
     assert.equal(parsed.order.length, SOURCES.length);
   }
-  for (const options of [{ queries: ['Python'] }, { format: 'remote' }, { per_page: 0 }, { mode: 'html' }]) {
-    assert.throws(() => parseConfig({ ru_market: { sources: { getmatch: options } } }));
+  for (const options of [
+    { queries: ['Python'] },
+    { format: 'remote' },
+    { per_page: 0 },
+    { mode: 'html' },
+  ]) {
+    assert.throws(() =>
+      parseConfig({ ru_market: { sources: { getmatch: options } } }),
+    );
   }
   assert.equal(cfg().per_page, 1);
 });
@@ -182,7 +230,9 @@ test('getmatch: repeated IDs or wrong offset return diagnostic partial result', 
     let calls = 0;
     const logs = [];
     const jobs = await adapters.getmatch(cfg(), {
-      ...ctx(async () => (++calls === 1 ? fixture() : repeatIds ? page(1, 601) : page(0))),
+      ...ctx(async () =>
+        ++calls === 1 ? fixture() : repeatIds ? page(1, 601) : page(0),
+      ),
       log: (_, s) => logs.push(JSON.parse(s)),
     });
     assert.equal(calls, 2);
@@ -258,7 +308,14 @@ test('getmatch: experimental filters are opt-in; default requests are unchanged'
     const config = parseConfig({
       ru_market: {
         source: 'getmatch',
-        sources: { getmatch: { enabled: true, max_pages: pages, per_page: 1, ...options } },
+        sources: {
+          getmatch: {
+            enabled: true,
+            max_pages: pages,
+            per_page: 1,
+            ...options,
+          },
+        },
       },
     }).sources.getmatch;
     await adapters.getmatch(
@@ -274,15 +331,35 @@ test('getmatch: experimental filters are opt-in; default requests are unchanged'
     'https://getmatch.ru/api/offers?p=1&offset=0&limit=1',
     'https://getmatch.ru/api/offers?p=2&offset=1&limit=1',
   ]);
-  assert.deepEqual(await run({ sa: 300000, pa: '7', se: ['senior', 'middle'], l: ['Москва', 'Remote'] }), [
-    'https://getmatch.ru/api/offers?p=1&offset=0&limit=1&sa=300000&pa=7&se=senior&se=middle&l=%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0&l=Remote',
+  assert.deepEqual(
+    await run({
+      sa: 300000,
+      pa: '7',
+      se: ['senior', 'middle'],
+      l: ['Москва', 'Remote'],
+    }),
+    [
+      'https://getmatch.ru/api/offers?p=1&offset=0&limit=1&sa=300000&pa=7&se=senior&se=middle&l=%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0&l=Remote',
+    ],
+  );
+  assert.deepEqual(await run({ l: 'Berlin' }), [
+    'https://getmatch.ru/api/offers?p=1&offset=0&limit=1&l=Berlin',
   ]);
-  assert.deepEqual(await run({ l: 'Berlin' }), ['https://getmatch.ru/api/offers?p=1&offset=0&limit=1&l=Berlin']);
   for (const url of urls) assert.doesNotThrow(() => assertRequestUrl(url));
   const keys = new Set();
   for (const options of [{ sa: 1 }, { pa: 'x' }, { se: ['a'] }, { l: ['a'] }])
-    (await run(options)).forEach(u => new URL(u).searchParams.forEach((_, k) => keys.add(k)));
-  assert.deepEqual([...keys].sort(), ['l', 'limit', 'offset', 'p', 'pa', 'sa', 'se']);
+    (await run(options)).forEach(u =>
+      new URL(u).searchParams.forEach((_, k) => keys.add(k)),
+    );
+  assert.deepEqual([...keys].sort(), [
+    'l',
+    'limit',
+    'offset',
+    'p',
+    'pa',
+    'sa',
+    'se',
+  ]);
   for (const bad of [
     { sa: [1] },
     { pa: ['1'] },
@@ -297,7 +374,13 @@ test('getmatch: experimental filters are opt-in; default requests are unchanged'
     { q: 'python' },
   ]) {
     assert.throws(
-      () => parseConfig({ ru_market: { source: 'getmatch', sources: { getmatch: { enabled: true, ...bad } } } }),
+      () =>
+        parseConfig({
+          ru_market: {
+            source: 'getmatch',
+            sources: { getmatch: { enabled: true, ...bad } },
+          },
+        }),
       e => e.category === 'config',
       JSON.stringify(bad),
     );

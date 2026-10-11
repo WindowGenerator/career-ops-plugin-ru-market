@@ -1,5 +1,9 @@
 import assert from 'node:assert';
-import { assertRequestUrl, request, USER_AGENT } from '../lib/transport/http.mjs';
+import {
+  assertRequestUrl,
+  request,
+  USER_AGENT,
+} from '../lib/transport/http.mjs';
 import { createQueue, enqueue } from '../lib/transport/queue.mjs';
 import { retryAfterMs, withRetry } from '../lib/transport/retry.mjs';
 
@@ -48,7 +52,9 @@ test('request: sends the plugin User-Agent with a text Accept header through ctx
       return '<html></html>';
     },
   };
-  const body = await request(ctx, 'https://career.habr.com/vacancies', 'text', { retries: 0 });
+  const body = await request(ctx, 'https://career.habr.com/vacancies', 'text', {
+    retries: 0,
+  });
   assert.strictEqual(body, '<html></html>');
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(calls[0].url, 'https://career.habr.com/vacancies');
@@ -65,16 +71,28 @@ test('request: json kind uses ctx.fetchJson and an application/json Accept heade
     },
   };
   const url = 'https://getmatch.ru/api/offers?limit=1';
-  assert.deepStrictEqual(await request(ctx, url, 'json', { retries: 0 }), { ok: true });
+  assert.deepStrictEqual(await request(ctx, url, 'json', { retries: 0 }), {
+    ok: true,
+  });
   assert.strictEqual(calls[0].headers.Accept, 'application/json');
   assert.strictEqual('X-Api-App-Id' in calls[0].headers, false);
 });
 
 test('request: SuperJob requires a printable-ASCII API key and sends it as X-Api-App-Id', async () => {
-  const badEnvs = [undefined, {}, { SUPERJOB_API_KEY: '' }, { SUPERJOB_API_KEY: 'has space' }, { SUPERJOB_API_KEY: 5 }];
+  const badEnvs = [
+    undefined,
+    {},
+    { SUPERJOB_API_KEY: '' },
+    { SUPERJOB_API_KEY: 'has space' },
+    { SUPERJOB_API_KEY: 5 },
+  ];
   for (const env of badEnvs) {
     await assert.rejects(
-      request({ env, fetchJson: async () => ({}) }, 'https://api.superjob.ru/2.0/vacancies/', 'json'),
+      request(
+        { env, fetchJson: async () => ({}) },
+        'https://api.superjob.ru/2.0/vacancies/',
+        'json',
+      ),
       e => e.category === 'config',
     );
   }
@@ -86,7 +104,9 @@ test('request: SuperJob requires a printable-ASCII API key and sends it as X-Api
       return {};
     },
   };
-  await request(ctx, 'https://api.superjob.ru/2.0/vacancies/', 'json', { retries: 0 });
+  await request(ctx, 'https://api.superjob.ru/2.0/vacancies/', 'json', {
+    retries: 0,
+  });
   assert.strictEqual(seen[0]['X-Api-App-Id'], 'v3.r.key');
 });
 
@@ -98,7 +118,10 @@ test('request: rejects forbidden URLs before calling the context', async () => {
       return '';
     },
   };
-  await assert.rejects(request(ctx, 'https://career.habr.com/users', 'text'), forbidden);
+  await assert.rejects(
+    request(ctx, 'https://career.habr.com/users', 'text'),
+    forbidden,
+  );
   assert.strictEqual(called, false);
 });
 
@@ -112,7 +135,10 @@ test('request: retries=0 passes the first failure through unchanged', async () =
     },
   };
   const url = 'https://opendata.trudvsem.ru/api/v1/vacancies';
-  await assert.rejects(request(ctx, url, 'json', { retries: 0 }), e => e === error);
+  await assert.rejects(
+    request(ctx, url, 'json', { retries: 0 }),
+    e => e === error,
+  );
   assert.strictEqual(calls, 1);
 });
 
@@ -125,17 +151,34 @@ test('retryAfterMs: no hint, seconds, HTTP date, headers shapes and the 10 secon
   assert.strictEqual(retryAfterMs({ retryAfter: 999 }), 10_000);
   assert.strictEqual(retryAfterMs({ retryAfter: -5 }), 0);
   assert.strictEqual(retryAfterMs({ headers: { 'retry-after': '4' } }), 4000);
-  assert.strictEqual(retryAfterMs({ response: { headers: new Headers({ 'retry-after': '5' }) } }), 5000);
-  assert.strictEqual(retryAfterMs({ headers: new Headers({ 'Retry-After': '6' }) }), 6000);
-  assert.strictEqual(retryAfterMs({ retryAfter: 'Thu, 01 Jan 1970 00:00:03 GMT' }, 1000), 2000);
-  assert.strictEqual(retryAfterMs({ retryAfter: 'Thu, 01 Jan 1970 00:00:03 GMT' }, 9000), 0);
+  assert.strictEqual(
+    retryAfterMs({
+      response: { headers: new Headers({ 'retry-after': '5' }) },
+    }),
+    5000,
+  );
+  assert.strictEqual(
+    retryAfterMs({ headers: new Headers({ 'Retry-After': '6' }) }),
+    6000,
+  );
+  assert.strictEqual(
+    retryAfterMs({ retryAfter: 'Thu, 01 Jan 1970 00:00:03 GMT' }, 1000),
+    2000,
+  );
+  assert.strictEqual(
+    retryAfterMs({ retryAfter: 'Thu, 01 Jan 1970 00:00:03 GMT' }, 9000),
+    0,
+  );
   assert.strictEqual(retryAfterMs({ retryAfter: 'garbage' }), 0);
 });
 
 test('withRetry: backoff doubles, is capped at 5 seconds and honours a longer Retry-After', async () => {
   const delays = [];
   let calls = 0;
-  const error = Object.assign(new Error('HTTP 503'), { status: 503, retryAfter: 4 });
+  const error = Object.assign(new Error('HTTP 503'), {
+    status: 503,
+    retryAfter: 4,
+  });
   await assert.rejects(
     withRetry(
       async () => {
@@ -228,13 +271,22 @@ test('enqueue: every allowlisted host has a queue and unknown hosts are refused'
   for (const host of hosts) {
     assert.strictEqual(await enqueue(host, async () => host), host);
   }
-  assert.throws(() => enqueue('example.com', async () => {}), /Unsupported request host: example\.com/);
+  assert.throws(
+    () => enqueue('example.com', async () => {}),
+    /Unsupported request host: example\.com/,
+  );
 });
 
 test('legacy: queue host list is a second copy of the http allowlist and must be kept in sync by hand', () => {
   // assertRequestUrl accepts exactly the hosts that enqueue has queues for; nothing enforces it.
-  assert.throws(() => enqueue('api.hh.ru', async () => {}), /Unsupported request host/);
-  assert.throws(() => assertRequestUrl('https://api.hh.ru/vacancies'), forbidden);
+  assert.throws(
+    () => enqueue('api.hh.ru', async () => {}),
+    /Unsupported request host/,
+  );
+  assert.throws(
+    () => assertRequestUrl('https://api.hh.ru/vacancies'),
+    forbidden,
+  );
 });
 
 let failures = 0;
@@ -247,5 +299,7 @@ for (const { name, run } of tests) {
     console.error(`FAIL - ${name}`, error);
   }
 }
-console.log(`${tests.length - failures}/${tests.length} transport tests passed`);
+console.log(
+  `${tests.length - failures}/${tests.length} transport tests passed`,
+);
 process.exitCode = failures ? 1 : 0;

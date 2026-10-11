@@ -12,10 +12,15 @@ import { SourceError } from '../lib/errors.mjs';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
-const job = id => ({ title: `Job ${id}`, url: `https://example.test/${id}`, note: 'source: habr-career' });
+const job = id => ({
+  title: `Job ${id}`,
+  url: `https://example.test/${id}`,
+  note: 'source: habr-career',
+});
 const silent = { log() {} };
 
-const habrPage = card => `<html><body><div class="vacancy-card">${card}</div></body></html>`;
+const habrPage = card =>
+  `<html><body><div class="vacancy-card">${card}</div></body></html>`;
 const habrCard = ({ date = '', chips = '' } = {}) => `
   <div class="vacancy-card__date">${date}</div>
   <div class="vacancy-card__company"><a>Acme</a></div>
@@ -31,8 +36,17 @@ test('legacy: getmatch and helloworld-rs stop remaining routes on an access erro
     (await paginate('superjob', ['a', 'b'], 1, load, silent)).map(j => j.title),
     ['Job b'],
   );
-  await assert.rejects(paginate('getmatch', ['a', 'b'], 1, load, silent), e => e.category === 'access');
-  const jobs = await paginate('helloworld-rs', ['b', 'a', 'c'], 1, load, silent);
+  await assert.rejects(
+    paginate('getmatch', ['a', 'b'], 1, load, silent),
+    e => e.category === 'access',
+  );
+  const jobs = await paginate(
+    'helloworld-rs',
+    ['b', 'a', 'c'],
+    1,
+    load,
+    silent,
+  );
   assert.deepStrictEqual(
     jobs.map(j => j.title),
     ['Job b'],
@@ -41,8 +55,16 @@ test('legacy: getmatch and helloworld-rs stop remaining routes on an access erro
 
 test('legacy: paginate writes matchedQueries onto the job objects returned by the provider', async () => {
   const returned = job(1);
-  await paginate('superjob', ['q'], 1, async () => ({ jobs: [returned], hasNext: false }), silent);
-  assert.deepStrictEqual(returned.matchedQueries, [{ query: 'q', queryId: 'superjob-q1' }]);
+  await paginate(
+    'superjob',
+    ['q'],
+    1,
+    async () => ({ jobs: [returned], hasNext: false }),
+    silent,
+  );
+  assert.deepStrictEqual(returned.matchedQueries, [
+    { query: 'q', queryId: 'superjob-q1' },
+  ]);
 });
 
 test('legacy: paginate stops a route on an empty page unless the provider sets continueOnEmpty', async () => {
@@ -78,7 +100,8 @@ test('legacy: index.mjs calls adapters with (config, ctx) only, so fetch options
     await plugin.provider.fetch(
       { ru_market: { source: 'habr-career' } },
       {
-        fetchText: async () => '<html><body><div class="no-content">Вакансий нет</div></body></html>',
+        fetchText: async () =>
+          '<html><body><div class="no-content">Вакансий нет</div></body></html>',
         ...silent,
       },
     );
@@ -99,7 +122,9 @@ test('legacy: habr drops the date of a card whose date text says "updated"', () 
   const dated = '<time datetime="2026-09-25T10:30:00+03:00">25 сентября</time>';
   const [fresh] = parseHabr(habrPage(habrCard({ date: dated }))).jobs;
   assert.strictEqual(fresh.postedAt, Date.parse('2026-09-25T10:30:00+03:00'));
-  const [updated] = parseHabr(habrPage(habrCard({ date: `обновлено ${dated}` }))).jobs;
+  const [updated] = parseHabr(
+    habrPage(habrCard({ date: `обновлено ${dated}` })),
+  ).jobs;
   assert.strictEqual('postedAt' in updated, false);
 });
 
@@ -116,7 +141,10 @@ test('legacy: superjob and trudvsem rebuild the salary note from parsed amounts 
       },
     ],
   });
-  assert.strictEqual(superjob.jobs[0].note, 'source: superjob; salary: from 100 to 200 RUB');
+  assert.strictEqual(
+    superjob.jobs[0].note,
+    'source: superjob; salary: from 100 to 200 RUB',
+  );
   const trudvsem = parseTrudvsem({
     status: '200',
     meta: { total: 1 },
@@ -134,15 +162,22 @@ test('legacy: superjob and trudvsem rebuild the salary note from parsed amounts 
       ],
     },
   });
-  assert.strictEqual(trudvsem.jobs[0].note, 'source: trudvsem; salary: from 100 to 200 RUB');
+  assert.strictEqual(
+    trudvsem.jobs[0].note,
+    'source: trudvsem; salary: from 100 to 200 RUB',
+  );
 });
 
 test('legacy: geekjob uses a card date only when it carries an explicit publication label', () => {
-  const page = time => `<html><body><ul id="serplist" class="serp-list"><li class="collection-item avatar">
+  const page =
+    time => `<html><body><ul id="serplist" class="serp-list"><li class="collection-item avatar">
     <a class="title" href="/vacancy/${'a'.repeat(24)}">Dev</a>${time}</li></ul></body></html>`;
-  const plain = parseGeekjob(page('<time datetime="2026-09-25">25 сентября</time>')).jobs[0];
+  const plain = parseGeekjob(
+    page('<time datetime="2026-09-25">25 сентября</time>'),
+  ).jobs[0];
   assert.strictEqual('postedAt' in plain, false);
-  const labelled = '<time itemprop="datePosted" datetime="2026-09-25">25 сентября</time>';
+  const labelled =
+    '<time itemprop="datePosted" datetime="2026-09-25">25 сентября</time>';
   const posted = parseGeekjob(page(labelled)).jobs[0];
   assert.strictEqual(posted.postedAt, Date.parse('2026-09-25T00:00:00+03:00'));
 });

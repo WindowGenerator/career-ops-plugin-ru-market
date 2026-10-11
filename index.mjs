@@ -34,14 +34,20 @@ async function fetchAll(entry, ctx) {
   const config = parseConfig(entry);
   // LEGACY(parser-pipeline): adapters accept a third `options` argument (health uses it for
   // `retries: 0`), but the plugin never passes one here.
-  const results = await Promise.allSettled(config.selected.map(id => adapters[id](config.sources[id], ctx)));
+  const results = await Promise.allSettled(
+    config.selected.map(id => adapters[id](config.sources[id], ctx)),
+  );
   const jobs = [];
   let successes = 0;
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
       ctx.log?.(
         'ru-market',
-        JSON.stringify({ source: config.selected[index], category: categoryOf(result.reason), status: 'failed' }),
+        JSON.stringify({
+          source: config.selected[index],
+          category: categoryOf(result.reason),
+          status: 'failed',
+        }),
       );
       return;
     }
@@ -54,7 +60,12 @@ async function fetchAll(entry, ctx) {
   if (results.length === 1) {
     throw results[0].reason;
   }
-  const summary = results.map((result, index) => `${config.selected[index]}=${categoryOf(result.reason)}`).join(', ');
+  const summary = results
+    .map(
+      (result, index) =>
+        `${config.selected[index]}=${categoryOf(result.reason)}`,
+    )
+    .join(', ');
   throw new SourceError('sources-failed', `All sources failed: ${summary}`);
 }
 
