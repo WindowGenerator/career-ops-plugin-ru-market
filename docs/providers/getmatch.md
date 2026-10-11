@@ -1,7 +1,7 @@
 # getmatch
 
 Status: Implemented
-Date: 2026-10-10
+Date: 2026-10-11
 Type: guide
 
 ## Status
@@ -13,7 +13,7 @@ Experimental, opt-in. Released as a sixth optional source in 0.4.0; experimental
 - The undocumented `https://getmatch.ru/api/offers` endpoint through `ctx.fetchJson`, adapter `lib/getmatch.mjs`. No token, cookies or browser. `mode` accepts `api` and `auto`; `auto` has the same API behaviour and does not launch a browser.
 - Authorization: none.
 - Disabled by default. Adding the declared host `getmatch.ru` may require normal renewed plugin consent on upgrade.
-- `lib/http.mjs` allows only the exact path `/api/offers`; cards, profiles, auth and apply paths stay forbidden.
+- `lib/transport/http.mjs` allows only the exact path `/api/offers`; cards, profiles, auth and apply paths stay forbidden.
 
 ## Configuration
 

@@ -1,7 +1,7 @@
 # Trudvsem (Work in Russia)
 
 Status: Implemented
-Date: 2026-10-10
+Date: 2026-10-11
 Type: guide
 
 ## Status
@@ -12,7 +12,7 @@ Implemented in 0.3.0 as an opt-in source of the `ru-market` provider (the portal
 
 - Public JSON API `https://opendata.trudvsem.ru/api/v1/vacancies` through `ctx.fetchJson`, adapter `lib/trudvsem.mjs`. `mode` accepts `api` and `auto`.
 - Authorization: none.
-- Host `opendata.trudvsem.ru` is declared in `manifest.json`; `lib/http.mjs` allows only `/api/v1/vacancies`.
+- Host `opendata.trudvsem.ru` is declared in `manifest.json`; `lib/transport/http.mjs` allows only `/api/v1/vacancies`.
 
 ## Configuration
 

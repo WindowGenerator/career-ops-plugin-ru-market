@@ -4,7 +4,7 @@ import plugin from '../index.mjs';
 import { parseHelloWorld, parseHelloWorldSalary, fetchHelloWorld } from '../lib/helloworld.mjs';
 import { parseConfig, SOURCES, DEFAULT_SOURCES } from '../lib/config.mjs';
 import { assertRequestUrl } from '../lib/transport/http.mjs';
-import { jobUrl } from '../lib/normalize.mjs';
+import { jobUrl } from '../lib/processors/normalize.mjs';
 import { checkHealth } from '../scripts/health.mjs';
 const fixture = name => readFileSync(new URL(`../fixtures/helloworld-rs/${name}.html`, import.meta.url), 'utf8');
 const url = 'https://www.helloworld.rs/oglasi-za-posao?q=Data+Engineer';

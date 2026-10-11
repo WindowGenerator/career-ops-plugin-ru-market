@@ -1,7 +1,7 @@
 # Habr Career
 
 Status: Implemented
-Date: 2026-10-10
+Date: 2026-10-11
 Type: guide
 
 ## Status
@@ -13,7 +13,7 @@ Implemented since 0.1.0 as a source of the `ru-market` provider. Enabled by defa
 - Public HTML listing `https://career.habr.com/vacancies[/<category>][/remote]`, parsed in `lib/habr-career.mjs`. No login, cookies or application submission.
 - `mode` accepts `html` and `auto`; both use the same HTML route.
 - Authorization: none.
-- Host `career.habr.com` is declared in `manifest.json`; `lib/http.mjs` allows only `/vacancies`, an optional category and `/remote`.
+- Host `career.habr.com` is declared in `manifest.json`; `lib/transport/http.mjs` allows only `/vacancies`, an optional category and `/remote`.
 - A challenge, CAPTCHA or login wall gives an `access` error: do not bypass it, do not use account access and do not request employer sites.
 
 ## Configuration

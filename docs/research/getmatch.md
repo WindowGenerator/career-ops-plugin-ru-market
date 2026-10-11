@@ -1,7 +1,7 @@
 # getmatch.ru: vacancy source research
 
 Status: Reference
-Date: 2026-10-07
+Date: 2026-10-11
 Type: research
 
 ## Question
@@ -86,10 +86,10 @@ This is a preliminary estimate of changes against the plugin code at the time, n
 
 1. **Confirm the permitted access method.** Prefer a documented API/feed. If only browser collection is permitted, check rendering of one page and one current card via Playwright, plus filters, pagination and the archive marker. Do not pin internal endpoints and parameters as an official contract.
 2. **Agree on data and normalization.** Use only permitted fields: title, company, canonical link, location/format, salary and a confirmed publication date. Descriptions only to the permitted extent. Keep regional remote restrictions; do not substitute a missing date with the current one and do not treat an archived card as active.
-3. **Add the `lib/getmatch.mjs` adapter.** Define a checkable response contract, pagination, deduplication, access errors, limits and schema changes. For permitted HTML use the existing `lib/html.mjs` tools; do not introduce Playwright into the runtime without checking host capabilities. The current contract offers `ctx.fetchJson`/`ctx.fetchText`, and existing adapters do not use a browser context. A separate browser must not bypass the plugin engine's network restrictions.
+3. **Add the `lib/getmatch.mjs` adapter.** Define a checkable response contract, pagination, deduplication, access errors, limits and schema changes. For permitted HTML use the existing `lib/helpers/html.mjs` tools; do not introduce Playwright into the runtime without checking host capabilities. The current contract offers `ctx.fetchJson`/`ctx.fetchText`, and existing adapters do not use a browser context. A separate browser must not bypass the plugin engine's network restrictions.
 4. **Update registration and configuration.** Add `getmatch` to `index.mjs` and `lib/config.mjs`, disabled by default. Keep old configurations and the deduplication order. At the time `primary_source_order` allowed exactly three initial sources or all five; after adding the sixth, keep supporting existing lists of five. Write the example configuration only with verified filters.
-5. **Update HTTP guarding and queues.** Put only permitted host/path into `manifest.json` and `lib/http.mjs`, add a queue in `lib/queue.mjs`, respect agreed limits and bound the page count. The current 750 ms between requests is an internal plugin setting, not a getmatch limit. On `403`, CAPTCHA or a required login, stop collection and emit an explicit status.
-6. **Extend URL normalization.** In `lib/normalize.mjs` add a check of canonical getmatch links and test URL identity by ID when the slug changes. Do not accept arbitrary external links and do not extract candidate profiles.
+5. **Update HTTP guarding and queues.** Put only permitted host/path into `manifest.json` and `lib/transport/http.mjs`, add a queue in `lib/transport/queue.mjs`, respect agreed limits and bound the page count. The current 750 ms between requests is an internal plugin setting, not a getmatch limit. On `403`, CAPTCHA or a required login, stop collection and emit an explicit status.
+6. **Extend URL normalization.** In `lib/processors/normalize.mjs` add a check of canonical getmatch links and test URL identity by ID when the slug changes. Do not accept arbitrary external links and do not extract candidate profiles.
 7. **Verify behaviour.** Fixtures of permitted output: active/archived vacancies, empty result versus loader and broken schema, regional remote, salary, pagination, repeated IDs; separately check the disabled source, backward compatibility of configurations, partial failure under `source: all` and host/path restrictions. Then `npm test`, an integration check with career-ops and one bounded live request to the permitted interface.
 8. **Documentation and release.** Update README, `portals.yml` examples, `skill.md`, the manifest description and the health check, taking into account the source being disabled by default. Publish the basis of use, data limits and the check date. Release after a successful live check and confirmation of the terms; until then do not claim the source works.
 

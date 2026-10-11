@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { untrusted, detect, LIMITS } from '../lib/untrusted.mjs';
-import { makeJob } from '../lib/normalize.mjs';
-import { paginate } from '../lib/paginate.mjs';
-import { deduplicate } from '../lib/dedup.mjs';
+import { makeJob } from '../lib/processors/normalize.mjs';
+import { paginate } from '../lib/processors/paginate.mjs';
+import { deduplicate } from '../lib/processors/dedup.mjs';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });

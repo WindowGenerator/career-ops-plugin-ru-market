@@ -5,7 +5,7 @@ import { fetchSuperjob } from './lib/superjob.mjs';
 import { fetchHelloWorld } from './lib/helloworld.mjs';
 import { fetchGetmatch } from './lib/getmatch.mjs';
 import { fetchTrudvsem } from './lib/trudvsem.mjs';
-import { deduplicate } from './lib/dedup.mjs';
+import { deduplicate } from './lib/processors/dedup.mjs';
 import { categoryOf, SourceError } from './lib/errors.mjs';
 
 export const adapters = { 'habr-career': fetchHabr, geekjob: fetchGeekjob, superjob: fetchSuperjob, trudvsem: fetchTrudvsem, getmatch: fetchGetmatch, 'helloworld-rs': fetchHelloWorld };

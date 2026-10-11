@@ -1,10 +1,10 @@
 import assert from 'node:assert';
-import { parseSalary, structuredSalary } from '../lib/normalize.mjs';
+import { parseSalary, structuredSalary } from '../lib/processors/normalize.mjs';
 import {
   compensationFromSalary, compensationMatchesFilter, formatExplicitCompensation,
   normalizeCompensation, parseCompensation,
-} from '../lib/compensation.mjs';
-import { confidence, deduplicate, localDedup, sourceOf } from '../lib/dedup.mjs';
+} from '../lib/processors/compensation.mjs';
+import { confidence, deduplicate, localDedup, sourceOf } from '../lib/processors/dedup.mjs';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });

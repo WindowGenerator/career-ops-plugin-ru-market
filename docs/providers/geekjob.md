@@ -1,7 +1,7 @@
 # GeekJob
 
 Status: Implemented
-Date: 2026-10-10
+Date: 2026-10-11
 Type: guide
 
 ## Status
@@ -13,7 +13,7 @@ Implemented since 0.1.0 as a source of the `ru-market` provider. Enabled by defa
 - Public HTML listing `https://geekjob.ru/vacancies/` (page `N` as `/vacancies/N`), parsed in `lib/geekjob.mjs`. No login, cookies or application submission.
 - `mode` accepts `html` and `auto`; both use the same HTML route.
 - Authorization: none.
-- Host `geekjob.ru` is declared in `manifest.json`; `lib/http.mjs` allows only `/vacancies/` with an optional numeric page.
+- Host `geekjob.ru` is declared in `manifest.json`; `lib/transport/http.mjs` allows only `/vacancies/` with an optional numeric page.
 - A challenge, CAPTCHA or login wall gives an `access` error: do not bypass it.
 
 ## Configuration

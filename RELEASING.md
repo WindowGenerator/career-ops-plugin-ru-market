@@ -1,6 +1,6 @@
 # Release procedure
 
-1. Update `manifest.json`, `package.json` and `lib/http.mjs` User-Agent version
+1. Update `manifest.json`, `package.json` and `lib/transport/http.mjs` User-Agent version
    together. Record parser/access changes and current health in RELEASE_NOTES.md.
 2. Run `npm test`, `npm run test:integration`, and
    `node ../career-ops/plugin-audit.mjs .`. Run plugin health separately; distinguish

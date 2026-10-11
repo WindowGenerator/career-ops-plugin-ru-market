@@ -46,7 +46,7 @@ The form has filters `workplace[]=office|remote|hybrid`, `senioritet[]=1|2|3`, `
 
 ### Proposed mapping to the existing Job
 
-The shared constructor already provides most of the needed fields: [lib/normalize.mjs](../../lib/normalize.mjs). The proposal is to use it, adding only HelloWorld rules; rewriting the other adapters is not required.
+The shared constructor already provides most of the needed fields: [lib/processors/normalize.mjs](../../lib/processors/normalize.mjs). The proposal is to use it, adding only HelloWorld rules; rewriting the other adapters is not required.
 
 | Source data | Job field | Rule / limitation |
 | --- | --- | --- |
@@ -60,11 +60,11 @@ The shared constructor already provides most of the needed fields: [lib/normaliz
 | Date next to the clock | Not `postedAt` | The verified example shows the listing expiry, not publication. In listing-only v1 `postedAt` is absent. |
 | Missing description | `hasDescription=false`, `dataLevel=listing` | `description` absent; do not substitute technologies for a description. |
 | Listing salary | `compensation` | Explicit amount, currency, net/gross, source text; do not guess an unknown period. |
-| Matched search phrase | `matchedQueries` | Already produced by the shared [paginate](../../lib/paginate.mjs); query matches are merged by [dedup](../../lib/dedup.mjs). |
+| Matched search phrase | `matchedQueries` | Already produced by the shared [paginate](../../lib/processors/paginate.mjs); query matches are merged by [dedup](../../lib/processors/dedup.mjs). |
 | Eligibility from Serbia | `eligibility.status=unknown` | The current contract supports only unknown; Remote and a Serbian site do not by themselves confirm the right to work from Serbia. |
 | Seniority and technologies | Shared optional lists | Level scale `intern / entry / mid / senior`; all explicit levels/technologies and source labels are kept. Filtering is a separate core stage. |
 
-`helloworld-rs` matches the current extraction of source via `[a-z-]+`: an underscore in the source ID would be truncated. See [lib/dedup.mjs](../../lib/dedup.mjs).
+`helloworld-rs` matches the current extraction of source via `[a-z-]+`: an underscore in the source ID would be truncated. See [lib/processors/dedup.mjs](../../lib/processors/dedup.mjs).
 
 Geographic selection and legal/contractual eligibility are different things. For v1, listings with Serbian places, with explicit permission for Serbia and with unknown remote geography may be kept; only explicitly incompatible restrictions are excluded. The checked listing has too little information to confirm that Serbia is permitted for a generic Remote. Keeping unknown records is an accepted product decision, not confirmation of availability. Do not make hidden card requests to change this.
 
@@ -81,7 +81,7 @@ Observations from one [salary listing](https://www.helloworld.rs/oglasi-za-posao
 
 The magnitude of an amount does not prove month/hour/year. These cards show no period; for the first one the surrounding HTML was additionally checked. The `price:1, currency:RSD` seen in analytics JavaScript describes a commerce event and is not a salary. No RSD vacancy salary was found in the checked sample.
 
-The current [parseSalary](../../lib/normalize.mjs) and [parseCompensation](../../lib/compensation.mjs) are not designed for `2.600,00` and RSD. The minimal change is a small parser for the source format feeding the existing `normalizeCompensation`, without changing common units or currency conversions. Keep an unsupported or ambiguous format as `rawText`, with no invented numbers. The legacy `salary` may be derived from the same numbers if needed, but downstream must receive `compensation` with `period=unknown`.
+The current [parseSalary](../../lib/processors/normalize.mjs) and [parseCompensation](../../lib/processors/compensation.mjs) are not designed for `2.600,00` and RSD. The minimal change is a small parser for the source format feeding the existing `normalizeCompensation`, without changing common units or currency conversions. Keep an unsupported or ambiguous format as `rawText`, with no invented numbers. The legacy `salary` may be derived from the same numbers if needed, but downstream must receive `compensation` with `period=unknown`.
 
 ### What core preserves and what it does not yet support
 
@@ -90,7 +90,7 @@ The current sibling core checkout and the shipped `companion/core-contract.patch
 - The direct plugin provider passes the `hook.fetch` result without field projection: core `plugins/_engine.mjs`. Unknown fields may reach scan, but this creates no filtering or interface storage.
 - Obsolete since 0.8.0 (the patch was deleted, extra fields pass through upstream `local-parser` since PR #4697): the patched core `providers/local-parser.mjs` explicitly passed `locationText`, `locations`, `workArrangement`, `sourceId`, `compensation`, `matchedQueries`, `hasDescription`, `dataLevel`; `eligibility` is passed only with status `unknown`. Top-level `seniority`, `skills` or `tags` are absent from the allowlist and are lost on this path. The same is visible in the shipped patch (deleted in 0.8.0).
 - In core `scan.mjs` the location filter reads `job.location`, country eligibility reads `job.description`, salary reads `job.salary` together with `job.compensation`. One new structural field is not enough to change selection. There is no basis to claim that card technologies already take part in content filters.
-- The shared `makeJob` does not yet copy seniority/skills from its input. Simply adding them to the call is not enough. See [lib/normalize.mjs](../../lib/normalize.mjs).
+- The shared `makeJob` does not yet copy seniority/skills from its input. Simply adding them to the call is not enough. See [lib/processors/normalize.mjs](../../lib/processors/normalize.mjs).
 
 Clarification of existing core filtering: the settings exist, but they work on text, not on separate source tags.
 
@@ -168,7 +168,7 @@ A live request of the implemented adapter with `q=Python`, one page: 30 vacancie
 - [Bel-Dev card 760224](https://www.helloworld.rs/posao/Data-Engineer/Bel-Dev-d.o.o/760224)
 - [robots.txt](https://www.helloworld.rs/robots.txt)
 - [Terms of use](https://www.helloworld.rs/uslovi-koriscenja) and [older indexed terms](https://helloworld.rs/uslovi-koriscenja)
-- Repository code: [lib/normalize.mjs](../../lib/normalize.mjs), [lib/compensation.mjs](../../lib/compensation.mjs), [lib/paginate.mjs](../../lib/paginate.mjs), [lib/dedup.mjs](../../lib/dedup.mjs), `companion/core-contract.patch` (deleted in 0.8.0)
+- Repository code: [lib/processors/normalize.mjs](../../lib/processors/normalize.mjs), [lib/processors/compensation.mjs](../../lib/processors/compensation.mjs), [lib/processors/paginate.mjs](../../lib/processors/paginate.mjs), [lib/processors/dedup.mjs](../../lib/processors/dedup.mjs), `companion/core-contract.patch` (deleted in 0.8.0)
 - Core checkout (read-only, outside this repository): `career-ops/plugins/_engine.mjs`, `providers/local-parser.mjs`, `scan.mjs`, `title-keywords.mjs`, `classify-tier.mjs`, `tests/classify-tier-position.test.mjs`, `tests/content-filter-word-prefix.test.mjs`
 
 ## Conclusion

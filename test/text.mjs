@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { clean, decode, plainText, normalizedText, normalizedCompany } from '../lib/normalize.mjs';
+import { clean, decode, plainText, normalizedText, normalizedCompany } from '../lib/processors/normalize.mjs';
 import { SourceError, categoryOf } from '../lib/errors.mjs';
 
 const tests = [];

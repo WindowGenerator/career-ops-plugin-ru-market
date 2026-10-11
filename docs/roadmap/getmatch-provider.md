@@ -48,15 +48,15 @@ In `lib/getmatch.mjs` implement a pure `parseGetmatch(data)` and `fetchGetmatch(
 - For salary use `structuredSalary`, do not guess the currency when `null`. Do not present hidden and estimated salary as announced by the employer. Keep gross/net terms and period only when the field value is confirmed.
 - For `postedAt` accept a date with an explicit timezone or one confirmed by the API agreement. If the timezone is unknown, omit the field; do not change the global interpretation of dates of other sources.
 
-In `lib/normalize.mjs` add only HTTPS links `getmatch.ru/vacancies/{numeric-id}-{slug}`, without credentials, foreign hosts and ports; strip tracking query and fragment. Check that the URL ID matches the record ID. Use the URL from the API, do not generate a slug from the title.
+In `lib/processors/normalize.mjs` add only HTTPS links `getmatch.ru/vacancies/{numeric-id}-{slug}`, without credentials, foreign hosts and ports; strip tracking query and fragment. Check that the URL ID matches the record ID. Use the URL from the API, do not generate a slug from the title.
 
 ### 4. Pagination, deduplication and errors
 
 Compute the next offset from the confirmed `meta` contract, not from `offers.length` or the number of normalized vacancies. `max_pages` is a hard limit on page requests. Additionally recognize a repeated page by ID and lack of offset progress; report such cases as a diagnosable failure/partial result instead of looping.
 
-In `lib/paginate.mjs` the loop currently stops on `!result.jobs.length`. This is wrong for a page containing only special announcements or filtered vacancies. Add an optional flag, for example `continueOnEmpty`, which the adapter sets only when a next page is confirmed; keep the previous behaviour of other sources. A correct fully filtered result must return `[]` with status `ok`.
+In `lib/processors/paginate.mjs` the loop currently stops on `!result.jobs.length`. This is wrong for a page containing only special announcements or filtered vacancies. Add an optional flag, for example `continueOnEmpty`, which the adapter sets only when a next page is confirmed; keep the previous behaviour of other sources. A correct fully filtered result must return `[]` with status `ok`.
 
-In `lib/dedup.mjs` add the display name `getmatch` and identity by numeric ID: local deduplication currently uses the whole last path segment and treats different slugs as different vacancies. Use a shared identity helper in local deduplication and single-source comparison; keep the canonical link, do not merge different IDs by similar title.
+In `lib/processors/dedup.mjs` add the display name `getmatch` and identity by numeric ID: local deduplication currently uses the whole last path segment and treats different slugs as different vacancies. Use a shared identity helper in local deduplication and single-source comparison; keep the canonical link, do not merge different IDs by similar title.
 
 (Obsolete since 0.8.0: the status objects were removed; failures are logged and partial jobs are kept.) Keep the existing `sourceStatus`/`sourceStatuses`: failure of the first page is `failed`, of a later one `partial` with the vacancies already received. Under `source: all` the other sources keep working. For getmatch an `access` error must stop the remaining routes of the source; generalize the current special condition for HH only, without changing the behaviour of other sources. Do not retry `401/403` and CAPTCHA; for network/5xx/429 use bounded retries under existing rules, then stop the current route. Do not write responses and descriptions to logs.
 
@@ -67,8 +67,8 @@ In `lib/dedup.mjs` add the display name `getmatch` and identity by numeric ID: l
 | `index.mjs` | Import and register `adapters.getmatch` |
 | `lib/config.mjs` | `SOURCES`, key `sources.getmatch`, `enabled: false`, `mode: api`/`auto`, `max_pages`, `per_page` |
 | `manifest.json` | Allowed host `getmatch.ru`, description of the sixth source; no new env vars needed for the current anonymous route |
-| `lib/http.mjs` | Allow only the exact path `/api/offers` for getmatch; send the plugin's ordinary User-Agent and `Accept: application/json` |
-| `lib/queue.mjs` | getmatch queue with concurrency 1; choose the interval according to agreed terms, do not call it a published API limit |
+| `lib/transport/http.mjs` | Allow only the exact path `/api/offers` for getmatch; send the plugin's ordinary User-Agent and `Accept: application/json` |
+| `lib/transport/queue.mjs` | getmatch queue with concurrency 1; choose the interval according to agreed terms, do not call it a published API limit |
 
 Keep the then-current three default sources and support for `primary_source_order` of three and five sources. Additionally support a full list of six; append missing optional sources in a stable order. By default getmatch has the lowest priority. An explicit `source: getmatch` requires `sources.getmatch.enabled: true`, like the current optional sources.
 

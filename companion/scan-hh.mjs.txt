@@ -18,7 +18,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const abortInfo = signal => signal?.reason === 'deadline'
   ? { category: 'timeout', message: 'Collection deadline reached (timeout_ms); partial results returned' }
   : { category: 'interrupted', message: 'Collection interrupted; resume from checkpoint' };
-// Same parser as lib/compensation.mjs, kept inline because the companion is installed without plugin modules; a test checks parity.
+// Same parser as lib/processors/compensation.mjs, kept inline because the companion is installed without plugin modules; a test checks parity.
 function normalizeCompensation(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const out = {

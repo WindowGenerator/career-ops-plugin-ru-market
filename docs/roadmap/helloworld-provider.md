@@ -1,7 +1,7 @@
 # Plan: HelloWorld.rs integration
 
 Status: Implemented
-Date: 2026-10-09
+Date: 2026-10-11
 Type: roadmap
 
 Shipped as an optional source in 0.6.0 (see [RELEASE_NOTES.md](../../RELEASE_NOTES.md)); user-facing description in the [HelloWorld.rs provider page](../providers/helloworld-rs.md). Agreed product decisions Q1-Q8, 2026-10-09. The first version of the adapter is implemented. Basis: [research of the live listing and the core contract](../research/helloworld.md).
@@ -80,7 +80,7 @@ The public HTML listing is technically verified. The [research](../research/hell
 - [x] Send phrases through `q`. The `/python/` path is a site technology filter, not equivalent to keyword search. Keep the matched queries in `matchedQueries`.
 - [x] Follow the verified next-page link with offsets 0, 30 and onward; validate origin, route, preservation of the original query and offset progress. Bound traversal by `max_pages`, detect a repeated page/link, mark reaching the limit in diagnostics.
 - [x] Parse only vacancy cards: title, employer, place/mode, salary, separate seniority and technology labels. Exclude ratings, benefits and advertising from fields. Do not treat arbitrary HTML as an empty result.
-- [x] Add the verified host to `manifest.json` and `lib/queue.mjs`; allow in `lib/http.mjs` only the necessary HTTPS listing routes. Normalizing card links does not mean permission to load them in v1.
+- [x] Add the verified host to `manifest.json` and `lib/transport/queue.mjs`; allow in `lib/transport/http.mjs` only the necessary HTTPS listing routes. Normalizing card links does not mean permission to load them in v1.
 - [x] Merge duplicates by ID, keeping queries. On failure of later pages/another query keep the results already received and status partial. On an access ban stop further requests to the source and mark the rest as skipped.
 
 ### Stage 3. Checks and adapter release readiness

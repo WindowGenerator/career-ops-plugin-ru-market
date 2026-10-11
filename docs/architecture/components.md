@@ -31,9 +31,9 @@ flowchart LR
     CFG["lib/config.mjs<br/>ru_market validation"]
     AD["Adapters<br/>habr-career, geekjob, superjob,<br/>trudvsem, getmatch, helloworld-rs"]
     INF["Infrastructure<br/>http, queue, retry, paginate, html"]
-    NORM["lib/normalize.mjs + compensation.mjs<br/>makeJob"]
+    NORM["lib/processors/normalize.mjs + compensation.mjs<br/>makeJob"]
     UNT["lib/untrusted.mjs<br/>normalization, injection flags"]
-    DD["lib/dedup.mjs<br/>cross-board dedup"]
+    DD["lib/processors/dedup.mjs<br/>cross-board dedup"]
   end
 
   subgraph Comp["HH companion (outside the sandbox)"]
