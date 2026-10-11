@@ -6,10 +6,10 @@ core_root="${CAREER_OPS_ROOT:-$plugin_root/../career-ops}"
 core_root="$(cd "$core_root" && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/ru-market-integration.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
-git -C "$core_root" archive 8c9aae34244ec2f79d1d21c05a34c5de608e7747 | tar -x -C "$test_root"
+# Stock upstream career-ops, never patched: CAREER_OPS_ROOT must be an unmodified checkout (CI pins the commit).
+git -C "$core_root" archive "${CAREER_OPS_REF:-HEAD}" | tar -x -C "$test_root"
 ln -s "$core_root/node_modules" "$test_root/node_modules"
 cd "$test_root"
-git apply "$plugin_root/companion/core-contract.patch"
 export CAREER_OPS_ROOT="$test_root"
 node plugins.mjs new ru-market
 (cd "$plugin_root" && tar --exclude=.git --exclude=node_modules --exclude=health.json -cf - .) | tar -xf - -C plugins.local/ru-market
@@ -58,8 +58,6 @@ import { readFileSync } from 'node:fs';
 const pipeline = readFileSync('data/pipeline.md', 'utf8');
 const history = readFileSync('data/scan-history.tsv', 'utf8');
 const receipt = JSON.parse(readFileSync('scan-receipt.json', 'utf8'));
-assert(receipt.source_statuses.some(s => s.source === 'habr-career' && typeof s.query === 'string' && s.queryId));
-assert(receipt.source_statuses.every(s => s.source !== 'hh'));
 assert.match(pipeline, /https:\/\/career.habr.com\/vacancies\/201/);
 assert.match(pipeline, /cross-listed: GeekJob/);
 assert.match(pipeline, /https:\/\/geekjob.ru\/vacancy\/000000000000000000000301/);
@@ -68,7 +66,6 @@ assert.match(history, /ru-market-api/);
 assert.match(pipeline, /https:\/\/getmatch.ru\/vacancies\/601-python-platform-engineer/);
 assert.match(history, /getmatch.ru/);
 assert.match(pipeline, /https:\/\/www.helloworld.rs\/posao\/Data-Engineer/);
-assert(receipt.source_statuses.some(s => s.source === 'helloworld-rs' && s.query === 'Data Engineer'));
 assert(!pipeline.includes('Synthetic description intentionally not copied'));
 console.log('integration: scaffold, audit, consent, scan preview, pipeline and history OK');
 JS
@@ -78,11 +75,9 @@ JS
 mkdir -p scripts/ru-market
 cat > scripts/ru-market/hh-stub.mjs <<'JS'
 console.log(JSON.stringify({ jobs: [{ title: 'Python Backend Engineer', url: 'https://hh.ru/vacancy/101', company: 'Тестовая компания', source: 'hh',
-  injectionFlags: ['conceal'] }], sourceStatuses: [{ source: 'hh', status: 'ok', completed_pages: 1, count: 1 }] }));
+  injectionFlags: ['conceal'], salary: { min: 275000, max: 275000, currency: 'RUB' }, compensation: { min: 200000, max: 350000, currency: 'RUB', period: 'month', taxBasis: 'net', rawText: '200 000–350 000 ₽ в месяц на руки' } }] }));
 JS
 cat > portals.yml <<'YAML'
-trust_filter:
-  enabled: true
 job_boards:
   - name: HH browser
     provider: local-parser
@@ -105,9 +100,7 @@ import { readFileSync } from 'node:fs';
 const pipeline = readFileSync('data/pipeline.md', 'utf8');
 assert.match(pipeline, /https:\/\/hh.ru\/vacancy\/101/);
 assert(!pipeline.includes('career.habr.com/vacancies/201'), 'duplicate from ru-market must be dropped, HH kept');
-assert.match(pipeline, /prompt-injection-suspected/);
 const ru = JSON.parse(readFileSync('dedup-ru.json', 'utf8'));
 assert.equal(ru.added, 0); assert(ru.duplicates >= 1);
-console.log('integration: HH scanned first keeps its job over the ru-market duplicate; injection flag in trust output');
+console.log('integration: HH scanned first keeps its job over the ru-market duplicate; unpatched core accepts the extra fields');
 JS
-CAREER_OPS_ROOT="$test_root" node "$plugin_root/test/core-patch.mjs"

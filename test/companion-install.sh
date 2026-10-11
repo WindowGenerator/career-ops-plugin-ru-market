@@ -1,14 +1,15 @@
 #!/bin/sh
 set -eu
 plugin_root=$(pwd)
-core_root=${CAREER_OPS_ROOT:-$plugin_root/../career-ops}
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/hh-install.XXXXXX")
 trap 'rm -rf "$test_root"' EXIT HUP INT TERM
-mkdir -p "$test_root/bin" "$test_root/providers"
-git -C "$core_root" archive 8c9aae34244ec2f79d1d21c05a34c5de608e7747 | tar -xf - -C "$test_root"
-git -C "$test_root" init -q
-ln -s "$core_root/node_modules" "$test_root/node_modules"
+mkdir -p "$test_root/bin" "$test_root/node_modules/playwright" "$test_root/providers"
+# Minimal stand-ins for the core checkout: the installer only needs plugins.mjs, package.json and a resolvable playwright.
+printf '{"name":"playwright","main":"index.js"}\n' > "$test_root/node_modules/playwright/package.json"
+printf 'module.exports = {};\n' > "$test_root/node_modules/playwright/index.js"
 printf '{}\n' > "$test_root/package.json"
+printf '// core sentinel\n' > "$test_root/scan.mjs"
+printf '// core sentinel\n' > "$test_root/providers/local-parser.mjs"
 # Model the core CLI's on-disk contract, including partial failures. No network.
 cat > "$test_root/plugins.mjs" <<'JS'
 import assert from 'node:assert/strict';
@@ -40,16 +41,15 @@ JS
 cat > "$test_root/bin/curl" <<'SH'
 #!/bin/sh
 while [ "$#" -gt 0 ]; do
-  if [ "$1" = '--output' ]; then case "$request_url" in *core-contract.patch) cp "$HH_CONTRACT_FIXTURE" "$2" ;; *core-contract-0.6.patch) cp "$HH_PREVIOUS_CONTRACT_FIXTURE" "$2" ;; *lib/untrusted.mjs) cp "$HH_LIB_FIXTURE" "$2" ;; *local-parser.patch) cp "$HH_PATCH_FIXTURE" "$2" ;; *) cp "$HH_INSTALL_FIXTURE" "$2" ;; esac; exit; fi
+  if [ "$1" = '--output' ]; then case "$request_url" in *lib/untrusted.mjs) cp "$HH_LIB_FIXTURE" "$2" ;; *companion/scan-hh.mjs.txt) cp "$HH_INSTALL_FIXTURE" "$2" ;; *) echo "unexpected download: $request_url" >&2; exit 1 ;; esac; exit; fi
   case "$1" in https:*) request_url="$1" ;; esac
   shift
 done
 exit 1
 SH
-chmod +x "$test_root/bin/curl"
-export HH_CONTRACT_FIXTURE="$plugin_root/companion/core-contract.patch"
-export HH_PATCH_FIXTURE="$plugin_root/companion/local-parser.patch"
-export HH_PREVIOUS_CONTRACT_FIXTURE="$plugin_root/companion/core-contract-0.6.patch"
+# The installer must not use git at all: it never patches or inspects core.
+printf '#!/bin/sh\necho "installer must not call git" >&2\nexit 1\n' > "$test_root/bin/git"
+chmod +x "$test_root/bin/curl" "$test_root/bin/git"
 export HH_LIB_FIXTURE="$plugin_root/lib/untrusted.mjs"
 export HH_INSTALL_FIXTURE="$plugin_root/companion/scan-hh.mjs.txt"
 export PATH="$test_root/bin:$PATH"
@@ -89,18 +89,10 @@ for failure in remove clone enable; do
   cmp config/plugins.yml previous.yml
 done
 sh update.sh
-git apply --reverse "$HH_CONTRACT_FIXTURE"
-git apply "$HH_PATCH_FIXTURE"
-sh update.sh
-git apply --reverse --check "$HH_CONTRACT_FIXTURE"
-# Upgrade from the 0.6.0 contract patch and a 0.6.0-style state file without the shared module.
-git apply --reverse "$HH_CONTRACT_FIXTURE"
-git apply "$HH_PREVIOUS_CONTRACT_FIXTURE"
+# A 0.6.0-style state file without the shared module list is upgraded in place.
 mv scripts/ru-market/lib "$test_root/lib-saved"
 node --input-type=module -e "import fs from 'node:fs'; const f='scripts/ru-market/scan-hh.install.json'; const s=JSON.parse(fs.readFileSync(f)); delete s.files; fs.writeFileSync(f, JSON.stringify(s)+'\n');"
-sh update.sh > upgrade06.log 2>&1
-grep -q 'Upgraded core contract' upgrade06.log
-git apply --reverse --check "$HH_CONTRACT_FIXTURE"
+sh update.sh
 cmp scripts/ru-market/lib/untrusted.mjs "$HH_LIB_FIXTURE"
 # A locally edited or unmanaged shared module blocks the update, like the tool itself.
 printf '\n// user edit\n' >> scripts/ru-market/lib/untrusted.mjs
@@ -118,13 +110,8 @@ if sh update.sh > refusal.log 2>&1; then echo 'update overwrote local changes' >
 grep -q 'Local or unmanaged changes' refusal.log
 grep -q 'user edit' scripts/ru-market/scan-hh.mjs
 cp "$HH_INSTALL_FIXTURE" scripts/ru-market/scan-hh.mjs
-# An incompatible core must leave the managed tool and prior extension intact.
-git apply --reverse "$HH_CONTRACT_FIXTURE"
-git apply "$HH_PATCH_FIXTURE"
-printf '\n// incompatible fixture\n' > scan.mjs
-cp providers/local-parser.mjs previous-parser.mjs
-cp scripts/ru-market/scan-hh.mjs previous-tool.mjs
-if sh update.sh > incompatible.log 2>&1; then echo 'incompatible core accepted' >&2; exit 1; fi
-cmp providers/local-parser.mjs previous-parser.mjs
-cmp scripts/ru-market/scan-hh.mjs previous-tool.mjs
-echo 'companion install/update: auto-detection, rollback, pinned source, patch migration, shared module and local edit protection OK'
+# Core files are never touched, whatever their content.
+printf '// core sentinel\n' > expected-core.mjs
+cmp scan.mjs expected-core.mjs
+cmp providers/local-parser.mjs expected-core.mjs
+echo 'companion install/update: auto-detection, rollback, pinned source, shared module and local edit protection, core untouched OK'

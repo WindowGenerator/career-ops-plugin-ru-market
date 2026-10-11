@@ -23,18 +23,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: plugin
-      # Pinned to the base core that companion/core-contract.patch is generated against; health.yml
-      # pins a different core on purpose (it needs only buildCtx). Existence of both commits could not be
-      # verified offline.
+      # Stock upstream core, never patched. Pinned to a commit after upstream PR #4697 (local-parser passes
+      # a parser's extra job fields through, merged 2026-10-03); verified to exist and to descend from the
+      # merge commit 034ca77 via the GitHub API. health.yml tracks upstream HEAD instead.
       - uses: actions/checkout@v4
         with:
           repository: career-ops-hq/career-ops
-          ref: 8c9aae34244ec2f79d1d21c05a34c5de608e7747
+          ref: 95709261abfd3679b7cbc91f53f6e486d41cffa7
           path: career-ops
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # The pinned core checkout does not track a root package-lock.json.
+      # The pinned core checkout does not track a root package-lock.json (checked at the pinned commit).
       - run: npm install --ignore-scripts --no-package-lock
         working-directory: career-ops
       - run: npm run test:integration
