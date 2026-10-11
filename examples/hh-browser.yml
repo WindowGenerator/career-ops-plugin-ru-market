@@ -18,7 +18,7 @@ job_boards:
       # professional_role: [96]   # numeric HH role IDs
       # only_with_salary: true
       # Companion deadline in ms, checked between pages. On expiry it exits 0 with the jobs collected so far
-      # and sourceStatuses status partial/failed, category timeout. Keep it below parser.timeout_ms.
+      # (the reason goes to stderr, not to core). Keep it below parser.timeout_ms.
       timeout_ms: 100000
     parser:
       command: node

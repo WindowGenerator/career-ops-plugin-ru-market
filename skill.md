@@ -29,7 +29,7 @@ them, set `sources.superjob.enabled: true` or `sources.trudvsem.enabled: true` i
 
 For diagnosis, run `node scripts/health.mjs --career-ops /path/to/career-ops`
 from the plugin directory. This is plugin-local health; `verify-portals.mjs`
-does not load this plugin. See README for status meanings and core limitations.
+does not load this plugin. See README for core limitations.
 
 The HH browser search is installed separately into career-ops and runs through `provider: local-parser`, using Playwright from career-ops. Configuration and limitations: [companion/README.md](companion/README.md). This is the only HH transport and a separate tool outside the plugin's permissions.
 

@@ -1,3 +1,17 @@
+## 0.8.0 - patch-free companion (BREAKING)
+
+Principle: nothing changes career-ops core behaviour. The plugin and the companion work with stock upstream career-ops that contains upstream PR #4697 (`local-parser` passes a parser's extra job fields through, merged 2026-10-03); CI pins one such commit.
+
+Breaking changes:
+
+- Core patches removed. `companion/core-contract.patch`, `core-contract-0.6.patch` and `local-parser.patch` are deleted and no longer attached to releases; `install.sh` never applies, reverses or migrates a patch and never touches core. A core already patched by 0.6.x or 0.7.x installers keeps the patch; to remove it use your own `git apply --reverse` with the patch from the old release, or reset the core files (`providers/local-parser.mjs`, `providers/_trust-validator.mjs`, `providers/_types.js`, `providers/_compensation.mjs`, `scan.mjs`).
+- Companion output contract 3 (tool 0.8.0). The JSON envelope is `{contractVersion, toolVersion, jobs}`: `sourceStatuses` is gone. `--import-cache` rejects contract 2 caches with "regenerate the cache"; there is no compatibility shim. Checkpoints of contract 2 are not resumable.
+- `salary` in companion output is the midpoint of a complete RUB monthly range (`min` = `max`). One-sided ranges, other currencies and other or unknown periods have no `salary`; the exact range, raw text, period and tax basis stay in `compensation`, which core ignores. Core's `salary_filter` compares only `salary` numbers and ignores period and tax basis.
+- Status feature removed. The plugin no longer attaches `sourceStatuses`/`queryStatuses`; the companion no longer reports statuses to core. A blocked or partial HH run exits 0 with the jobs found, the reason is on stderr and in `queries-summary.json` (`queries`), `query-XX.json` and `checkpoint.json`. Exit 1 remains for configuration errors and for an incomplete `--scan` run. Artifact files, `--resume` and the cache workflow are unchanged.
+- No trust rule for injection flags: `injectionFlags` stays on the job as information, core adds no `prompt-injection-suspected` flag and no -30 trust score. `lib/untrusted.mjs` sanitisation is unchanged.
+- The companion no longer imports `providers/_compensation.mjs` from core; the parser is inlined.
+- Tests and CI run against unpatched upstream career-ops (`CAREER_OPS_ROOT` must be a stock checkout); `test/core-patch.mjs` is removed.
+
 ## 0.7.0 - HH via browser companion only, prompt-injection guard (BREAKING)
 
 Breaking change: the HH API adapter is removed.

@@ -1,10 +1,10 @@
 # Shared seniority and technology filters in career-ops
 
 Status: Planned
-Date: 2026-10-10
+Date: 2026-10-11
 Type: roadmap
 
-Planned separately from the first release of the HelloWorld.rs adapter. Decisions were agreed on 2026-10-09; core filters are not implemented. In 0.7.0 the plugin and the combined patch already pass `employment` and `professional_role` through local-parser (checked by the test `test/core-patch.mjs`); settings for allowed and excluded values in core remain undone.
+Planned separately from the first release of the HelloWorld.rs adapter. Decisions were agreed on 2026-10-09; core filters are not implemented. In 0.7.0 the plugin and the combined patch passed `employment` and `professional_role` through local-parser; since 0.8.0 there is no patch and the fields reach core through upstream `local-parser` pass-through (PR #4697). Settings for allowed and excluded values in core remain undone. The upstream `field_filters` and `filter_on` (PR #3438) read only own scalar properties, so object-shaped `employment` and `professional_role` are not readable by them (unverified for HH semantics; see [hh-companion-alternatives](../research/hh-companion-alternatives.md)).
 
 ## Problem
 
@@ -23,19 +23,18 @@ The current `skip_tiers` and `title_filter` read the title, and `content_filter`
 - Optional Job fields `employment` and `professional_role` are added (decision of the adapter review, section c). The plugin passes them immediately as additional fields, like `dataLevel` and `eligibility`; core starts using them only after this stage is implemented. The shape is like seniority and technologies: lists of strings keeping source labels, for example `employment: { values: [], rawLabels: [] }` and `professional_role: { values: [], rawLabels: [] }`. The exact shape is refined at the implementation stage and recorded in `_types.js`.
 - The filtering contract of the new fields matches the rules above: an unknown value does not exclude a vacancy, a known one is checked independently of other fields, old configurations do not change. For `employment` and `professional_role` core receives allowed and excluded values; comparison uses normalized values, source labels stay for displaying reasons.
 - The `experience`, `employment` and salary filters for HH are applied in core after selection over Job fields, not as server-side parameters; server-side HH parameters (`search_field`, `excluded_text`, `professional_role`, `only_with_salary`) are limited to the browser companion. Basis: a core convention, there are no server-side filters in core providers.
-- All these fields pass through local-parser in one combined core patch together with injection flags and the fix of the `salary` shape; the patch is applied locally by the installer, and core updates may require reinstalling it (decision g in [provider-architecture-review.md](provider-architecture-review.md)).
-- The local-parser route passes only the keys listed in it (`../career-ops/providers/local-parser.mjs:216-223`): for new fields the list has to be extended, otherwise they are dropped (as `skills` and `seniority` are now).
+- Obsolete since 0.8.0: the combined core patch (decision g in [provider-architecture-review.md](provider-architecture-review.md)) was deleted. Extra fields now pass through the stock upstream `local-parser` after upstream PR #4697 (merged 2026-10-03); before it, the route passed only a fixed key list and dropped `skills` and `seniority`.
 
 ## Scope
 
 - [ ] Support in core the optional seniority and technology lists from the [adapter plan](helloworld-provider.md), the agreed scale, source labels and the policy for missing data.
 - [ ] Define the priority of an explicit source seniority relative to classification by title; do not mix an observed label with a heuristic.
 - [ ] Add filtering settings to core: allowed/excluded seniority levels and technologies. Agree the matching rules for several values and the combination with existing filters.
-- [ ] Check passing the shared fields through the direct plugin provider and the supported local-parser; document the contract and supported versions. Partially done: `employment`, `professional_role` pass through local-parser with the patch (0.7.0); `skills`, `seniority` do not yet.
+- [ ] Check passing the shared fields through the direct plugin provider and the supported local-parser; document the contract and supported versions. Done for all extra fields since 0.8.0 through the upstream pass-through; check against the pinned upstream commit.
 - [ ] Show exclusion reasons and distinguish missing data from a mismatch of known values.
 - [ ] Check compatibility of existing settings, absent/partial fields, several levels, technology matches and exclusions, conflict between the source label and the title.
 - [ ] Check the end-to-end scenario HelloWorld -> Job -> core filters and add a configuration example.
-- [ ] Describe `employment` and `professional_role` in `_types.js`, extend the local-parser key list and add to core the settings of allowed and excluded values with exclusion reasons. Done in the patch: `_types.js` and the local-parser key list; not done: filtering settings and exclusion reasons.
+- [ ] Describe `employment` and `professional_role` in `_types.js`, extend the local-parser key list and add to core the settings of allowed and excluded values with exclusion reasons. The patch parts (`_types.js`, key list) are gone since 0.8.0 and not needed for pass-through; not done: filtering settings and exclusion reasons.
 
 ## Acceptance criteria
 

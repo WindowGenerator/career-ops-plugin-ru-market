@@ -1,16 +1,16 @@
 # Providers
 
 Status: Reference
-Date: 2026-10-10
+Date: 2026-10-11
 Type: guide
 
-One page per provider, plus the provider matrix below. The matrix describes the plugin as of 0.7.0 and is the single place where transport, authorization, filters and status of all providers are compared; other documents link here instead of repeating it.
+One page per provider, plus the provider matrix below. The matrix describes the plugin as of 0.8.0 and is the single place where transport, authorization, filters and status of all providers are compared; other documents link here instead of repeating it.
 
 ## Provider matrix
 
 | Provider | Transport | Authorization | Status | Enabled by default | Page |
 | --- | --- | --- | --- | --- | --- |
-| HH (hh.ru) | Browser companion (Playwright) through core `local-parser`; not part of the `ru-market` provider | None (anonymous browser context) | Implemented in 0.7.0 as the only HH transport; the API adapter was removed. Server-side parameters unverified against live HH | Not applicable (separate `portals.yml` entry) | [hh](hh.md) |
+| HH (hh.ru) | Browser companion (Playwright) through core `local-parser`; not part of the `ru-market` provider | None (anonymous browser context) | Implemented in 0.7.0 as the only HH transport (API adapter removed); patch-free since 0.8.0. Server-side parameters unverified against live HH | Not applicable (separate `portals.yml` entry) | [hh](hh.md) |
 | Habr Career | Public HTML listing | None | Implemented | Yes | [habr-career](habr-career.md) |
 | GeekJob | Public HTML listing | None | Implemented | Yes | [geekjob](geekjob.md) |
 | SuperJob | JSON API `api.superjob.ru` | Required `SUPERJOB_API_KEY` (application Secret key) | Implemented; live access with a key not verified | No | [superjob](superjob.md) |
@@ -26,7 +26,7 @@ Source selection and order are validated in `lib/config.mjs`: `ru_market.source`
 - Request queue: one request at a time per host. Spacing is 750 ms for Habr Career, GeekJob, SuperJob and Trudvsem, and 1000 ms for HelloWorld.rs and getmatch (`lib/queue.mjs`). These are internal conservative settings, not published limits of the sources.
 - Output fields shared by all `ru-market` adapters (built by `makeJob` in `lib/normalize.mjs`): `title`, `url` (canonical, tracking parameters removed), `company`, `location`, `note` (`source: <id>`, plus salary text), `source`, `transport`, `sourceId`, `locationText`, `locations`, `workArrangement`, `eligibility: {status: unknown}`, `dataLevel: listing`, `hasDescription`, `matchedQueries`, and when present `description`, `postedAt`, `salary` (`{min, max, currency}`), `compensation`, `skills`, `seniority`, `employment`, `professional_role`, `injectionFlags`. A job without a title or a valid canonical URL is dropped.
 - Untrusted text: all source text passes through `lib/untrusted.mjs`; instruction-like patterns produce `injectionFlags`, flagged jobs are kept.
-- Statuses: each source reports `sourceStatuses` (`ok`, `partial`, `failed`) and per-query `queryStatuses`; a failure of one source does not stop the others, and failure of all sources is an error.
+- Failures: a failure of one source does not stop the others (it is logged with safe request coordinates and the jobs already received are kept); failure of all sources is an error. No status object is attached to the result since 0.8.0, and core has no channel for one.
 - Health: `node scripts/health.mjs --career-ops ../career-ops [--source all|getmatch|helloworld-rs]` makes one listing request per source without retries; `all` covers only the enabled default sources (Habr Career, GeekJob). SuperJob and Trudvsem have no health check yet. Browser health for HH is separate (see [hh](hh.md)).
 
 ## Adapter details
@@ -49,7 +49,7 @@ The column "Source offers" for HH was filled from the list given in the revision
 | Source | Source offers | Plugin sends | Core filters after fetch |
 | --- | --- | --- | --- |
 | hh (API, removed in 0.7.0) | `experience`, `employment`, `salary`, `only_with_salary`, `professional_role`, `search_field`, `excluded_text` and others | Only `text`, `area`, `schedule`, `period` | Title, description, salary, age |
-| hh (browser, companion) | Search parameters on the hh.ru page | `text`, `page`, `area`, plus `search_field`, `excluded_text`, `professional_role`, `only_with_salary` (unverified against live HH) | Same |
+| hh (browser, companion) | Search parameters on the hh.ru page | `text`, `page`, `area`, plus `search_field`, `excluded_text`, `professional_role`, `only_with_salary` (unverified against live HH) | Same; `salary` is the midpoint of a complete RUB monthly range, otherwise absent (core's `salary_filter` ignores period and tax basis) |
 | habr-career | Not checked | Category, `remote` | Same |
 | geekjob | Not checked | Page | Same |
 | superjob | Not checked | `keyword` | Same |

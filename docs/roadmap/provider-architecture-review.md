@@ -1,8 +1,10 @@
 # Review of ru-market adapters and the 0.7.0 transition plan
 
 Status: Implemented
-Date: 2026-10-10
+Date: 2026-10-11
 Type: roadmap
+
+Note (2026-10-11): version 0.8.0 removed the combined core patch, the `sourceStatuses`/`queryStatuses` feature, the companion's exit-0-with-status channel, the `prompt-injection-suspected` trust rule and core-side unit-aware salary. Parts of this document that describe them (decisions e partly, g, h, k partly, and the matching tasks and criteria) are historical; see [hh-companion-alternatives](../research/hh-companion-alternatives.md) and [companion/README.md](../../companion/README.md) for the current contract.
 
 The review was done against the state of the 0.6.0 repository and the local core checkout (`92f4e4d2`). Decisions a-k were agreed with the owner. The implementation was done on the branch `feature/provider-architecture-review` (0.7.0); deviations from this document are listed in the section "Implementation results" at the end. References of the form `file:line` refer to those versions. No live requests to the sources were made while preparing the document.
 

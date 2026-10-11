@@ -1,7 +1,7 @@
 # Plan: adding getmatch to ru-market
 
 Status: Implemented
-Date: 2026-10-07
+Date: 2026-10-11
 Type: roadmap
 
 Shipped as an experimental opt-in source in 0.4.0 (see [RELEASE_NOTES.md](../../RELEASE_NOTES.md)); user-facing description in the [getmatch provider page](../providers/getmatch.md). The adapter code, registration and offline checks are implemented; the live contract and the basis for release remain unverified (see Open decisions).
@@ -58,7 +58,7 @@ In `lib/paginate.mjs` the loop currently stops on `!result.jobs.length`. This is
 
 In `lib/dedup.mjs` add the display name `getmatch` and identity by numeric ID: local deduplication currently uses the whole last path segment and treats different slugs as different vacancies. Use a shared identity helper in local deduplication and single-source comparison; keep the canonical link, do not merge different IDs by similar title.
 
-Keep the existing `sourceStatus`/`sourceStatuses`: failure of the first page is `failed`, of a later one `partial` with the vacancies already received. Under `source: all` the other sources keep working. For getmatch an `access` error must stop the remaining routes of the source; generalize the current special condition for HH only, without changing the behaviour of other sources. Do not retry `401/403` and CAPTCHA; for network/5xx/429 use bounded retries under existing rules, then stop the current route. Do not write responses and descriptions to logs.
+(Obsolete since 0.8.0: the status objects were removed; failures are logged and partial jobs are kept.) Keep the existing `sourceStatus`/`sourceStatuses`: failure of the first page is `failed`, of a later one `partial` with the vacancies already received. Under `source: all` the other sources keep working. For getmatch an `access` error must stop the remaining routes of the source; generalize the current special condition for HH only, without changing the behaviour of other sources. Do not retry `401/403` and CAPTCHA; for network/5xx/429 use bounded retries under existing rules, then stop the current route. Do not write responses and descriptions to logs.
 
 ### 5. Configuration and network
 
