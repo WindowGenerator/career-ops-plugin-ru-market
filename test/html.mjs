@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { all, byClass, checkAccess, hasClass, hasNext, nodeText, parseHtml } from '../lib/html.mjs';
+import { all, byClass, checkAccess, hasClass, hasNext, nodeText, parseHtml } from '../lib/helpers/html.mjs';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
