@@ -52,6 +52,17 @@ Each is marked `LEGACY(parser-pipeline)` in code. The tests are named `legacy: .
 - `lib/providers/getmatch.mjs:91`: `continueOnEmpty` to pass over pages of promotions only.
 - `lib/helpers/html.mjs:33`: the `findLastIndex` fallback, dead on Node 18 and later.
 
+## Code review findings left for later
+
+The review of the branch found no regression introduced by the refactor. It did confirm pre-existing behaviour that the refactor must not change, so these are open for a separate behaviour change:
+
+- `lib/providers/getmatch.mjs:51`: `checkVacancyIdentity` reads `match(...)[1]` without a null guard; a vacancy URL without a numeric id prefix throws a `TypeError` (category `unknown`) instead of `broken-markup`. Same as before the branch.
+- `lib/processors/dedup.mjs:51`: `postingIdentity` can produce an empty or `undefined` id for unexpected URLs, merging unrelated jobs.
+- `lib/processors/compensation.mjs:84`: `taxBasisOf` matches `net` and `gross` without word boundaries, so unrelated words in salary text can set a tax basis.
+- `lib/providers/superjob.mjs` and `lib/providers/trudvsem.mjs`: `Number(x) || undefined` turns an explicit amount of 0 into a missing bound.
+- `index.mjs:55`: no per-source timeout around the parallel fetch.
+- The LEGACY list above (order list `indexOf` -1, salary note split, hard-coded stop-on-access ids, duplicated helpers) also appeared in the review.
+
 ## Remaining candidates
 
 1. One module per provider that owns its hosts, configuration, id rules, queue spacing and deduplication identity. Today these are spread over eight modules (`config`, `http`, `queue`, `normalize`, `dedup`, `paginate`, `index`, the provider). Removes the duplicated host list and the hard-coded source ids.
