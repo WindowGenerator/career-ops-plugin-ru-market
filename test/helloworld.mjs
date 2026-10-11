@@ -193,7 +193,9 @@ test('config is opt-in, requires queries and preserves legacy order lengths', ()
     assert.throws(
       () =>
         parseConfig({
-          ru_market: { primary_source_order: ['hh', ...SOURCES].slice(0, n) },
+          ru_market: {
+            primary_source_order: ['unknown', ...SOURCES].slice(0, n),
+          },
         }),
       e => e.category === 'config',
     );

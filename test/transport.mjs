@@ -280,11 +280,11 @@ test('enqueue: every allowlisted host has a queue and unknown hosts are refused'
 test('legacy: queue host list is a second copy of the http allowlist and must be kept in sync by hand', () => {
   // assertRequestUrl accepts exactly the hosts that enqueue has queues for; nothing enforces it.
   assert.throws(
-    () => enqueue('api.hh.ru', async () => {}),
+    () => enqueue('api.example.com', async () => {}),
     /Unsupported request host/,
   );
   assert.throws(
-    () => assertRequestUrl('https://api.hh.ru/vacancies'),
+    () => assertRequestUrl('https://api.example.com/vacancies'),
     forbidden,
   );
 });

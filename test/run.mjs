@@ -403,7 +403,7 @@ test('egress guard rejects private/action/foreign URLs', () => {
     'https://employer.example/jobs',
     'http://career.habr.com/vacancies',
     'https://career.habr.com:444/vacancies',
-    'https://api.hh.ru/vacancies',
+    'https://api.example.com/vacancies',
   ])
     assert.throws(() => assertRequestUrl(url));
   for (const url of [
@@ -510,7 +510,7 @@ test('host queues are independent and removed hosts are unsupported', async () =
   release();
   await blocked;
   assert.throws(
-    () => enqueue('api.hh.ru', async () => {}),
+    () => enqueue('api.example.com', async () => {}),
     /Unsupported request host/,
   );
 });
@@ -653,7 +653,7 @@ test('salary has min/max/currency only and compensation carries the units', () =
     undefined,
   );
 });
-test('hh configuration is rejected with a migration hint and removed hosts are gone', () => {
+test('hh configuration is rejected as unsupported and removed hosts are gone', () => {
   for (const raw of [
     { source: 'hh' },
     { sources: { hh: { queries: ['Python'] } } },
@@ -663,10 +663,7 @@ test('hh configuration is rejected with a migration hint and removed hosts are g
   ]) {
     assert.throws(
       () => parseConfig({ ru_market: raw }),
-      e =>
-        e.category === 'config' &&
-        /local-parser/.test(e.message) &&
-        /0\.7\.0/.test(e.message),
+      e => e.category === 'config' && !/local-parser/.test(e.message),
     );
   }
   assert(!('hh' in adapters));
@@ -688,8 +685,8 @@ test('primary_source_order accepts lengths 2/4/5/6 and rejects the previous 3 an
     );
   for (const order of [
     [...SOURCES.slice(0, 2), 'superjob'],
-    ['hh', ...SOURCES.slice(0, 2)],
-    [...SOURCES, 'hh'],
+    ['unknown', ...SOURCES.slice(0, 2)],
+    [...SOURCES, 'unknown'],
     SOURCES.slice(0, 1),
     [SOURCES[0], SOURCES[2], SOURCES[3], SOURCES[4]],
     [...SOURCES.slice(0, 2), 'superjob', 'trudvsem', 'superjob'],
@@ -698,18 +695,6 @@ test('primary_source_order accepts lengths 2/4/5/6 and rejects the previous 3 an
       () => parseConfig({ ru_market: { primary_source_order: order } }),
       e => e.category === 'config',
     );
-});
-test('all-source scan makes no HH requests', async () => {
-  const urls = [];
-  const jobs = await plugin.provider.fetch(
-    { ru_market: { source: 'all', max_pages: 1 } },
-    ctxFor(async url => {
-      urls.push(url);
-      return fixture(sourceFor(url));
-    }),
-  );
-  assert(urls.every(u => !/hh\.ru/.test(new URL(u).hostname)));
-  assert(jobs.length > 0);
 });
 test('SuperJob parses public listing and sends application key only to its API', async () => {
   const parsed = parseSuperjob(superjobPage());
