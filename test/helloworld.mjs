@@ -78,9 +78,10 @@ test('pagination, direct plugin contract, query union and page-limit diagnostic'
   } });
   assert.equal(requests.length, 4); assert.equal(jobs.length, 5); assert.equal(jobs[0].matchedQueries.length, 2);
   assert.deepEqual(jobs[0].seniority.levels, ['senior']); assert(jobs[0].skills.includes('Python'));
-  assert.equal(jobs.sourceStatuses[0].status, 'ok'); assert.equal(jobs.queryStatuses[0].stop_reason, 'exhausted');
-  const limited = await fetchHelloWorld({ queries: ['Data Engineer'], max_pages: 1 }, { fetchText: async () => fixture('normal') });
-  assert.equal(limited.queryStatuses[0].stop_reason, 'page-limit');
+  assert(!('sourceStatuses' in jobs) && !('sourceStatus' in jobs) && !('queryStatuses' in jobs));
+  let limitedCalls = 0;
+  await fetchHelloWorld({ queries: ['Data Engineer'], max_pages: 1 }, { fetchText: async () => { limitedCalls++; return fixture('normal'); } });
+  assert.equal(limitedCalls, 1);
 });
 test('partial failures preserve jobs; access stops remaining queries; repeated pages fail', async () => {
   for (const category of ['broken-markup', 'access']) {
@@ -88,12 +89,12 @@ test('partial failures preserve jobs; access stops remaining queries; repeated p
     const jobs = await fetchHelloWorld({ queries: ['Data Engineer', 'Python'], max_pages: 2 }, { fetchText: async () => {
       calls++; if (calls === 1) return fixture('normal'); throw Object.assign(new Error('fixture'), { category });
     } }, { retries: 0 });
-    assert.equal(jobs.length, 4); assert.equal(jobs.sourceStatus.status, 'partial');
-    assert.equal(jobs.queryStatuses[1].status, category === 'access' ? 'skipped' : 'failed');
+    assert.equal(jobs.length, 4);
     assert.equal(calls, category === 'access' ? 2 : 3);
   }
-  const repeated = await fetchHelloWorld({ queries: ['Data Engineer'], max_pages: 2 }, { fetchText: async target => fixture('normal').replace('/stranica/30', new URL(target).pathname.includes('/stranica/') ? '/stranica/60' : '/stranica/30') });
-  assert.equal(repeated.sourceStatus.category, 'broken-markup'); assert.equal(repeated.length, 4);
+  const logs = [];
+  const repeated = await fetchHelloWorld({ queries: ['Data Engineer'], max_pages: 2 }, { log: (_, value) => logs.push(JSON.parse(value)), fetchText: async target => fixture('normal').replace('/stranica/30', new URL(target).pathname.includes('/stranica/') ? '/stranica/60' : '/stranica/30') });
+  assert.equal(logs[0].category, 'broken-markup'); assert.equal(repeated.length, 4);
 });
 test('health uses one explicit query, one request and zero retries', async () => {
   let calls = 0;

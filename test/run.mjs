@@ -120,14 +120,13 @@ test('complete-link grouping prevents merging distinct same-board vacancies', ()
   assert.strictEqual(result.length, 2);
 });
 test('one failed source preserves other results', async () => {
-  const jobs = await plugin.provider.fetch({ ru_market: { source: 'all' } }, ctxFor(async url => {
+  const logs = [];
+  const jobs = await plugin.provider.fetch({ ru_market: { source: 'all' } }, { ...ctxFor(async url => {
     const source = sourceFor(url); if (source === 'habr-career') throw httpError(403); return fixture(source);
-  }));
+  }), log: (_, value) => logs.push(JSON.parse(value)) });
   assert.strictEqual(jobs.length, 1); assert.match(jobs[0].url, /geekjob/);
-  assert.deepStrictEqual(jobs.sourceStatuses.map(({ source, status, category }) => ({ source, status, category })), [
-    { source: 'habr-career', status: 'failed', category: 'access' },
-    { source: 'geekjob', status: 'ok', category: undefined },
-  ]);
+  assert(!('sourceStatuses' in jobs) && !('queryStatuses' in jobs));
+  assert(logs.some(entry => entry.source === 'habr-career' && entry.status === 'failed' && entry.category === 'access'));
 });
 test('all failed sources is an error, not empty', async () => {
   await assert.rejects(plugin.provider.fetch({ ru_market: { source: 'all' } }, ctxFor(async () => { throw httpError(403); })), e => e.category === 'sources-failed');
@@ -277,11 +276,11 @@ test('primary_source_order accepts lengths 2/4/5/6 and rejects the previous 3 an
   for (const order of [[...SOURCES.slice(0, 2), 'superjob'], ['hh', ...SOURCES.slice(0, 2)], [...SOURCES, 'hh'], SOURCES.slice(0, 1), [SOURCES[0], SOURCES[2], SOURCES[3], SOURCES[4]],
     [...SOURCES.slice(0, 2), 'superjob', 'trudvsem', 'superjob']]) assert.throws(() => parseConfig({ ru_market: { primary_source_order: order } }), e => e.category === 'config');
 });
-test('all-source scan makes no HH requests and reports no hh status', async () => {
+test('all-source scan makes no HH requests', async () => {
   const urls = [];
   const jobs = await plugin.provider.fetch({ ru_market: { source: 'all', max_pages: 1 } }, ctxFor(async url => { urls.push(url); return fixture(sourceFor(url)); }));
   assert(urls.every(u => !/hh\.ru/.test(new URL(u).hostname)));
-  assert(jobs.sourceStatuses.every(s => s.source !== 'hh' && s.status === 'ok'));
+  assert(jobs.length > 0);
 });
 test('SuperJob parses public listing and sends application key only to its API', async () => {
   const parsed = parseSuperjob(superjobPage());
@@ -326,12 +325,10 @@ test('Работа России partial server error reports safe request coordi
     return trudvsemPage(2);
   }), log: (_, value) => logs.push(JSON.parse(value)) });
   assert.strictEqual(jobs.length, 1);
-  assert.deepStrictEqual(jobs.sourceStatuses, [{ source: 'trudvsem', status: 'partial', completed_pages: 1,
+  assert.deepStrictEqual(logs, [{ source: 'trudvsem', completed_pages: 1,
     failed_page: 2, query_index: 1, request: 'https://opendata.trudvsem.ru/api/v1/vacancies?limit=1&offset=1',
-    http_status: 500, category: 'server', count: 1 }]);
-  assert.strictEqual(logs[0].request, jobs.sourceStatuses[0].request);
+    http_status: 500, category: 'server' }]);
   assert(!JSON.stringify(logs).includes('private search text'));
-  assert(!JSON.stringify(jobs.sourceStatuses).includes('private search text'));
 });
 test('employment and professional_role are explicit source labels, unknown otherwise', () => {
   const sj = superjobPage(); Object.assign(sj.objects[0], { type_of_work: { id: 6, title: 'Полная занятость' }, catalogues: [{ id: 33, title: 'Информационные технологии' }, { title: '' }] });

@@ -101,24 +101,25 @@ test('getmatch: continue through promotions-only and inactive page', async () =>
       const data = fixture(); if (promotionsOnly) data.offers.pop(); else data.offers[1].is_active = false;
       return data;
     }));
-    assert.equal(calls, 2); assert.equal(jobs.length, 1); assert.equal(jobs.sourceStatus.status, 'ok');
+    assert.equal(calls, 2); assert.equal(jobs.length, 1);
   }
 });
 test('getmatch: repeated IDs or wrong offset return diagnostic partial result', async () => {
   for (const repeatIds of [true, false]) {
     let calls = 0;
-    const jobs = await adapters.getmatch(cfg(), ctx(async () => ++calls === 1 ? fixture() : repeatIds ? page(1, 601) : page(0)));
+    const logs = [];
+    const jobs = await adapters.getmatch(cfg(), { ...ctx(async () => ++calls === 1 ? fixture() : repeatIds ? page(1, 601) : page(0)), log: (_, s) => logs.push(JSON.parse(s)) });
     assert.equal(calls, 2); assert.equal(jobs.length, 1);
-    assert.equal(jobs.sourceStatus.status, 'partial'); assert.equal(jobs.sourceStatus.category, 'broken-markup');
+    assert.equal(logs[0].category, 'broken-markup');
   }
 });
 test('getmatch: first/late access failure, no retries, safe diagnostics and source isolation', async () => {
   let calls = 0; const logs = [];
   const jobs = await adapters.getmatch(cfg(), { ...ctx(async () => { if (++calls > 1) throw statusError(403); return fixture(); }), log: (_, s) => logs.push(s) });
-  assert.equal(calls, 2); assert.equal(jobs.sourceStatus.status, 'partial'); assert.equal(jobs.sourceStatus.http_status, 403);
+  assert.equal(calls, 2); assert.equal(jobs.length, 1); assert.equal(JSON.parse(logs[0]).http_status, 403);
   assert(!JSON.stringify(logs).includes('Synthetic Platform'));
   calls = 0;
-  await assert.rejects(plugin.provider.fetch(entry, ctx(async () => { calls++; throw statusError(401); })), e => e.sourceStatuses[0].status === 'failed');
+  await assert.rejects(plugin.provider.fetch(entry, ctx(async () => { calls++; throw statusError(401); })), e => /401/.test(e.message) && !('sourceStatuses' in e));
   assert.equal(calls, 1);
   let routeCalls = 0;
   await assert.rejects(paginate('getmatch', ['a', 'b'], 2, async () => { routeCalls++; throw statusError(403); }, ctx()), /403/);
@@ -127,7 +128,7 @@ test('getmatch: first/late access failure, no retries, safe diagnostics and sour
     if (value.includes('getmatch.ru')) throw statusError(403);
     return { status: '200', meta: { total: 0 }, results: { vacancies: [] } };
   }));
-  assert.equal(merged.sourceStatuses.find(s => s.source === 'getmatch').status, 'failed');
+  assert.equal(merged.length, 0); assert(!('sourceStatuses' in merged));
 });
 test('getmatch: experimental filters are opt-in; default requests are unchanged', async () => {
   const urls = [];
