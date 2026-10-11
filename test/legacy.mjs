@@ -23,7 +23,7 @@ const habrCard = ({ date = '', chips = '' } = {}) => `
   ${chips}`;
 
 test('legacy: getmatch and helloworld-rs stop remaining routes on an access error, others do not', async () => {
-  const load = async (route, page) => {
+  const load = async (route, _page) => {
     if (route === 'a') throw new SourceError('access', 'blocked');
     return { jobs: [job(route)], hasNext: false };
   };

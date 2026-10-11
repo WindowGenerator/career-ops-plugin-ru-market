@@ -129,7 +129,7 @@ for (const source of DEFAULT_SOURCES) {
   test(`${source}: malformed URLs`, () => {
     let value = fixture(source);
     value = value.replace(
-      /href="[^\"]*" class="vacancy-card__title-link"|class="title" href="[^\"]*"/g,
+      /href="[^"]*" class="vacancy-card__title-link"|class="title" href="[^"]*"/g,
       source === 'habr-career'
         ? 'href="javascript:alert(1)" class="vacancy-card__title-link"'
         : 'class="title" href="https://evil.example/vacancy/000000000000000000000301"',

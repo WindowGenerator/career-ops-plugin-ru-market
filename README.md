@@ -39,6 +39,8 @@ Add an entry from the [example](examples/portals.yml) to your `portals.yml` and 
 
 ```sh
 npm test
+npm run lint        # Biome: lint and format check (CI runs the same)
+npm run check       # Biome: apply safe fixes and formatting
 CAREER_OPS_ROOT=../career-ops npm run test:integration
 ```
 

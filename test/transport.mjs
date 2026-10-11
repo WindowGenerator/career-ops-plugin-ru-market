@@ -59,7 +59,7 @@ test('request: sends the plugin User-Agent with a text Accept header through ctx
 test('request: json kind uses ctx.fetchJson and an application/json Accept header', async () => {
   const calls = [];
   const ctx = {
-    fetchJson: async (url, init) => {
+    fetchJson: async (_url, init) => {
       calls.push(init);
       return { ok: true };
     },
@@ -81,7 +81,7 @@ test('request: SuperJob requires a printable-ASCII API key and sends it as X-Api
   const seen = [];
   const ctx = {
     env: { SUPERJOB_API_KEY: 'v3.r.key' },
-    fetchJson: async (url, init) => {
+    fetchJson: async (_url, init) => {
       seen.push(init.headers);
       return {};
     },

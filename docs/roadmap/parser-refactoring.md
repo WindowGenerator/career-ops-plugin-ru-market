@@ -63,6 +63,15 @@ The review of the branch found no regression introduced by the refactor. It did 
 - `index.mjs:55`: no per-source timeout around the parallel fetch.
 - The LEGACY list above (order list `indexOf` -1, salary note split, hard-coded stop-on-access ids, duplicated helpers) also appeared in the review.
 
+## Lint warnings left for later
+
+Biome (`biome.json`) runs in CI with `npm run lint`. Two rules are set to `warn` because fixing them could change behaviour:
+
+- `noEmptyCharacterClassInRegex`: the `[^]` idiom ("any character, including newlines") in `lib/helpers/html.mjs:17-18` and `test/helloworld.mjs`. Replace with `[\s\S]` together with a test that pins the match.
+- `useIterableCallbackReturn`: `forEach`-style callbacks that return a value in `lib/processors/normalize.mjs`, `lib/providers/getmatch.mjs`, `lib/providers/helloworld.mjs` and `test/getmatch.mjs`.
+
+`lib/untrusted.mjs` is excluded from Biome: `install.sh` and `release.yml` check its sha256, and the companion embeds the same file. Companion files (`*.mjs.txt`) are not matched by Biome.
+
 ## Remaining candidates
 
 1. One module per provider that owns its hosts, configuration, id rules, queue spacing and deduplication identity. Today these are spread over eight modules (`config`, `http`, `queue`, `normalize`, `dedup`, `paginate`, `index`, the provider). Removes the duplicated host list and the hard-coded source ids.
