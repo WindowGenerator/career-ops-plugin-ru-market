@@ -1,3 +1,49 @@
+## 0.8.0 - patch-free companion (BREAKING)
+
+Principle: nothing changes career-ops core behaviour. The plugin and the companion work with stock upstream career-ops that contains upstream PR #4697 (`local-parser` passes a parser's extra job fields through, merged 2026-10-03); CI pins one such commit.
+
+Breaking changes:
+
+- Core patches removed. `companion/core-contract.patch`, `core-contract-0.6.patch` and `local-parser.patch` are deleted and no longer attached to releases; `install.sh` never applies, reverses or migrates a patch and never touches core. A core already patched by 0.6.x or 0.7.x installers keeps the patch; to remove it use your own `git apply --reverse` with the patch from the old release, or reset the core files (`providers/local-parser.mjs`, `providers/_trust-validator.mjs`, `providers/_types.js`, `providers/_compensation.mjs`, `scan.mjs`).
+- Companion output contract 3 (tool 0.8.0). The JSON envelope is `{contractVersion, toolVersion, jobs}`: `sourceStatuses` is gone. `--import-cache` rejects contract 2 caches with "regenerate the cache"; there is no compatibility shim. Checkpoints of contract 2 are not resumable.
+- `salary` in companion output is the midpoint of a complete RUB monthly range (`min` = `max`). One-sided ranges, other currencies and other or unknown periods have no `salary`; the exact range, raw text, period and tax basis stay in `compensation`, which core ignores. Core's `salary_filter` compares only `salary` numbers and ignores period and tax basis.
+- Status feature removed. The plugin no longer attaches `sourceStatuses`/`queryStatuses`; the companion no longer reports statuses to core. A blocked or partial HH run exits 0 with the jobs found, the reason is on stderr and in `queries-summary.json` (`queries`), `query-XX.json` and `checkpoint.json`. Exit 1 remains for configuration errors and for an incomplete `--scan` run. Artifact files, `--resume` and the cache workflow are unchanged.
+- No trust rule for injection flags: `injectionFlags` stays on the job as information, core adds no `prompt-injection-suspected` flag and no -30 trust score. `lib/untrusted.mjs` sanitisation is unchanged.
+- HH API migration support removed. `hh` in `ru_market` (`source`, `sources.hh`, `primary_source_order`) is now rejected by the generic unsupported-source checks, without the 0.7.0 `local-parser` hint. The 0.6.x migration guide and `examples/registry-pr.md` are deleted.
+- The companion no longer imports `providers/_compensation.mjs` from core; the parser is inlined.
+- Tests and CI run against unpatched upstream career-ops (`CAREER_OPS_ROOT` must be a stock checkout); `test/core-patch.mjs` is removed.
+
+## 0.7.0 - HH via browser companion only, prompt-injection guard (BREAKING)
+
+Breaking change: the HH API adapter is removed.
+
+- Removed `lib/hh.mjs`, `fixtures/hh`, `HH_ACCESS_TOKEN`, the `api.hh.ru` host and the `hh` source.
+  `hh` in `primary_source_order`, `source: hh` or `sources.hh` now fails with a `config` error that
+  points to `local-parser`. Default sources are `habr-career` and `geekjob`; allowed
+  `primary_source_order` lengths are 2, 4, 5 or 6 (previously 3, 5, 6 or 7).
+- Migration: (1) remove `hh` from `primary_source_order` and `sources.hh` from `portals.yml`;
+  (2) drop `HH_ACCESS_TOKEN` from `.env`; (3) add a separate `HH browser` entry with an
+  `hh_browser` block and a `local-parser` parser (see `examples/hh-browser.yml`, `docs/providers/hh.md`);
+  (4) rerun `install.sh`: it installs the companion, the shared module
+  `scripts/ru-market/lib/untrusted.mjs` (refused if locally modified) and upgrades the core patch.
+  Core updates may require reinstalling the patch.
+- Companion: `hh_browser` config in its own entry, server-side `search_field`, `excluded_text`,
+  `professional_role`, `only_with_salary` (unverified against live HH), `timeout_ms` deadline,
+  `--no-artifacts`. Blocks, timeouts and partial runs exit 0 with partial jobs and `sourceStatuses`
+  (`partial`/`failed`, reason, completed pages), which core reports as source errors.
+- New `lib/untrusted.mjs`: invisible Unicode, bidi and control characters, HTML comments removed,
+  length caps, English/Russian instruction patterns give `injectionFlags` (jobs kept). Counts appear
+  as `injection_flagged` in `sourceStatuses`. With the core patch and `trust_filter` enabled, one
+  `prompt-injection-suspected` trust flag and trustScore -30 per job.
+- `salary` is now `{min, max, currency}` (was `{from, to}`); `compensation` stays the source of truth.
+- New optional Job fields `employment` and `professional_role` (filled only from explicit
+  source labels: SuperJob and Trudvsem, unverified field names; unknown otherwise).
+- Combined core patch: local-parser passes `employment`, `professional_role`, `injectionFlags`,
+  accepts `{min,max}` salary so `salary_filter` uses it; trust validator rule for injection flags.
+- Experimental, unverified, opt-in getmatch filters `sa`, `pa`, `se`, `l`.
+- Note: core processes `portals.yml` entries in parallel, so duplicates between entries are won by
+  the entry that finishes first, not the first in the file (see README).
+
 ## 0.6.0 — optional HelloWorld.rs
 
 - Added opt-in `helloworld-rs` HTML keyword search with bounded pagination,
@@ -10,14 +56,14 @@
   Core filtering and local-parser passthrough remain a separate roadmap task.
 - Health supports `--source helloworld-rs` with one Python listing request.
   No browser fallback or detail requests. Source terms/access limitations are
-  documented in [docs/helloworld.md](docs/helloworld.md).
+  documented in [docs/providers/helloworld-rs.md](docs/providers/helloworld-rs.md).
 
 ## 0.5.0 — Reproducible HH browser batches
 
 - Added config-driven HH batch collection, cache import, HH-only scan config,
   query diagnostics/provenance, anonymous context reuse, checkpoint/resume,
   browser preflight and version reporting. API/browser routes remain separate.
-- Fixed lower-bound salary parsing when tax prose contains “до”. Explicit
+- Fixed lower-bound salary parsing when tax prose contains `до` ("up to"). Explicit
   compensation preserves month/year/hour/shift units and gross/net/unknown;
   the reviewed core patch adds filtering and formatting without annualization.
 - Install/update protect local tool edits, upgrade the previous parser patch
@@ -63,47 +109,46 @@
 
 ## 0.3.1
 
-Исправлена пагинация «Работы России»: параметр `offset` означает номер
-страницы. Раньше запрос второй страницы с `limit=100` отправлял `offset=100`
-и получал HTTP 500. Диагностика теперь указывает номер поискового запроса,
-страницу и HTTP-статус без текста вакансий и поисковой строки.
+Fixed Trudvsem (Work in Russia) pagination: the `offset` parameter means the page
+number. Previously a request for the second page with `limit=100` sent `offset=100`
+and received HTTP 500. Diagnostics now give the search query number, the page and
+the HTTP status without vacancy text or the search string.
 
-Habr Career больше не добавляет рейтинг к названию компании и не записывает
-прогноз «Похожие специалисты получают…» как зарплату вакансии. Живой поиск
-«Работы России» после исправления вернул 200 уникальных вакансий за две
-страницы; публичная выдача Habr проверена отдельно. HH по-прежнему отвечает
-`403`; SuperJob без ключа приложения не проверен.
+Habr Career no longer appends the rating to the company name and no longer records
+the forecast `Похожие специалисты получают…` ("similar specialists receive...") as the
+vacancy salary. The live Trudvsem search after the fix returned 200 unique vacancies
+over two pages; the public Habr listing was checked separately. HH still answers
+`403`; SuperJob without an application key was not verified.
 
 ## 0.3.0
 
-Добавлены SuperJob и «Работа России» через публичные API. Оба источника
-выключены по умолчанию; для SuperJob требуется `SUPERJOB_API_KEY` приложения.
-Проверен живой запрос к «Работе России» с поиском Python. SuperJob проверен
-локальными тестами без пользовательского ключа; живой доступ пока не проверен.
+Added SuperJob and Trudvsem (Work in Russia) through public APIs. Both sources are
+disabled by default; SuperJob needs the application's `SUPERJOB_API_KEY`.
+A live Trudvsem request with a Python search was checked. SuperJob was checked with
+local tests without a user key; live access has not been verified yet.
 
 ## 0.2.1
 
-Сокращён README. В релиз добавлены `install.sh` и `update.sh` с закреплённым
-SHA релизного коммита. Скрипты используют штатный CLI career-ops и включают
-плагин после установки.
+Shortened the README. The release now includes `install.sh` and `update.sh` with the
+pinned SHA of the release commit. The scripts use the standard career-ops CLI and
+enable the plugin after installation.
 
 ## 0.2.0
 
-Проверенный коммит реализации: `8f2435b7d7cf018e3cc169b996181e2c0f0030a9`.
-Точный SHA релизного коммита указан в опубликованных заметках GitHub и
-приложенном `ru-market.json`.
+Verified implementation commit: `8f2435b7d7cf018e3cc169b996181e2c0f0030a9`.
+The exact SHA of the release commit is given in the published GitHub notes and the
+attached `ru-market.json`.
 
-HH API принимает `HH_ACCESS_TOKEN` зарегистрированного приложения из окружения.
-HTML-поиск HH не добавлен: условия сайта запрещают автоматизированный парсинг.
-После первого отказа доступа HH остальные его запросы прекращаются. Provider
-возвращает статус каждого источника для отчёта о частичном результате. Причина
-наблюдавшегося 403 остаётся неизвестной; токен не гарантирует доступ.
+The HH API accepts the registered application's `HH_ACCESS_TOKEN` from the
+environment. HH HTML search was not added: the site terms forbid automated parsing.
+After the first HH access refusal its remaining requests are stopped. The provider
+returns the status of each source for the partial-result report. The cause of the
+observed 403 remains unknown; a token does not guarantee access.
 
-Совместный скан продолжает Habr Career и GeekJob после отказа HH. При
-обновлённом scanner core итоговый JSON содержит `status: partial`,
-`source_statuses` по площадкам и ошибку HH. Локальная правка core сохранена
-отдельным коммитом `5ab6b06f4ea46ade51a7c7fc3a0456cba6f9aa75`;
-она не входит в этот плагин.
+A combined scan continues with Habr Career and GeekJob after an HH refusal. With an
+updated core scanner the final JSON contains `status: partial`, `source_statuses`
+per board and the HH error. The local core change was saved as a separate commit
+`5ab6b06f4ea46ade51a7c7fc3a0456cba6f9aa75`; it is not part of this plugin.
 
 ## 0.1.0
 

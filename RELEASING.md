@@ -1,6 +1,6 @@
 # Release procedure
 
-1. Update `manifest.json`, `package.json` and `lib/http.mjs` User-Agent version
+1. Update `manifest.json`, `package.json` and `lib/transport/http.mjs` User-Agent version
    together. Record parser/access changes and current health in RELEASE_NOTES.md.
 2. Run `npm test`, `npm run test:integration`, and
    `node ../career-ops/plugin-audit.mjs .`. Run plugin health separately; distinguish
@@ -10,7 +10,9 @@
    tag/version, runs offline tests and publishes a GitHub release with the exact
    release commit SHA in its notes, pinned registry entry, and `install.sh` /
    `update.sh` assets. CI injects the SHA into the maintained `install.sh`, then
-   copies it to `update.sh` for compatibility with existing release URLs. The SHA
+   copies it to `update.sh` for compatibility with existing release URLs. The release
+   also attaches `untrusted.mjs` (the companion's shared module, installed to
+   `scripts/ru-market/lib/`) next to `scan-hh.mjs`. The SHA
    is injected during publishing because a tracked file cannot contain its own commit SHA.
    Offline/integration CI and scheduled health are separate jobs.
 4. Run the published `install.sh` from the career-ops directory, or install the
@@ -30,12 +32,12 @@
    fork/branch, add the generated file as `plugins-registry/ru-market.json` and
    include `registrationIssue` pointing to the real issue. Use the upstream
    `plugin-registry.md` PR template. Do not invent an issue number or pin a tag
-   name as a SHA. An initial PR description is in `examples/registry-pr.md`.
+   name as a SHA.
 7. For an update, rerun the new release's `install.sh` from the career-ops directory.
    It detects the installed plugin and replaces it with the new SHA using `--confirm`.
    The `update.sh` release asset is an identical copy and accepts fresh installs too.
    Failed replacements restore the plugin directory, lock and plugin configuration;
-   applied core patches and companion updates remain. Do not run other plugin
+   companion updates remain. The installer never modifies core. Do not run other plugin
    management commands concurrently with the installer.
    Search parameters remain in `portals.yml`, outside this repository.
 
@@ -44,4 +46,4 @@ Approval is granted by upstream maintainers after reviewing the pinned code.
 
 The release installers also fetch `companion/scan-hh.mjs.txt` from the same pinned commit and install it as a standalone career-ops script. Review this executable separately from the plugin audit. Test its browser lifecycle in career-ops with `node --test tests/providers/hh-browser.test.mjs`. The `.txt` source is not a plugin module.
 
-Release installers apply `companion/core-contract.patch` to career-ops after a clean `git apply --check`; already applied patches are detected. Incompatible local core edits stop installation. The patch is shipped as a release asset; the previous local-parser patch is retained for upgrade compatibility. Core system updates can replace this local extension; rerun the installer to restore it.
+Since 0.8.0 there are no core patches: release installers do not touch career-ops core, and no patch is shipped as a release asset. CI runs the integration and browser tests against stock upstream career-ops pinned in `.github/workflows/test.yml` to one commit that contains upstream PR #4697 (`local-parser` passes extra job fields through); `health.yml` tracks upstream HEAD. When bumping the pin, check that the commit exists in `career-ops-hq/career-ops` and descends from the PR merge commit.

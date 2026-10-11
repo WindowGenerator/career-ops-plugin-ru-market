@@ -6,10 +6,10 @@ core_root="${CAREER_OPS_ROOT:-$plugin_root/../career-ops}"
 core_root="$(cd "$core_root" && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/ru-market-integration.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
-git -C "$core_root" archive 8c9aae34244ec2f79d1d21c05a34c5de608e7747 | tar -x -C "$test_root"
+# Stock upstream career-ops, never patched: CAREER_OPS_ROOT must be an unmodified checkout (default: the commit pinned in .github/workflows/test.yml; override with CAREER_OPS_REF).
+git -C "$core_root" archive "${CAREER_OPS_REF:-95709261abfd3679b7cbc91f53f6e486d41cffa7}" | tar -x -C "$test_root"
 ln -s "$core_root/node_modules" "$test_root/node_modules"
 cd "$test_root"
-git apply "$plugin_root/companion/core-contract.patch"
 export CAREER_OPS_ROOT="$test_root"
 node plugins.mjs new ru-market
 (cd "$plugin_root" && tar --exclude=.git --exclude=node_modules --exclude=health.json -cf - .) | tar -xf - -C plugins.local/ru-market
@@ -40,11 +40,11 @@ dns.lookup = async () => [{ address: '93.184.216.34', family: 4 }];
 syncBuiltinESMExports();
 globalThis.fetch = async value => {
   const url = new URL(value);
-  const source = { 'api.hh.ru': 'hh', 'career.habr.com': 'habr-career', 'geekjob.ru': 'geekjob', 'getmatch.ru': 'getmatch', 'www.helloworld.rs': 'helloworld-rs' }[url.hostname];
+  const source = { 'career.habr.com': 'habr-career', 'geekjob.ru': 'geekjob', 'getmatch.ru': 'getmatch', 'www.helloworld.rs': 'helloworld-rs' }[url.hostname];
   if (!source) throw new Error(`Unexpected integration request: ${url.hostname}`);
-  const ext = ['hh', 'getmatch'].includes(source) ? 'json' : 'html';
+  const ext = source === 'getmatch' ? 'json' : 'html';
   return new Response(readFileSync(`plugins.local/ru-market/fixtures/${source}/normal.${ext}`, 'utf8'), {
-    status: 200, headers: { 'content-type': ['hh', 'getmatch'].includes(source) ? 'application/json' : 'text/html' },
+    status: 200, headers: { 'content-type': source === 'getmatch' ? 'application/json' : 'text/html' },
   });
 };
 JS
@@ -58,17 +58,49 @@ import { readFileSync } from 'node:fs';
 const pipeline = readFileSync('data/pipeline.md', 'utf8');
 const history = readFileSync('data/scan-history.tsv', 'utf8');
 const receipt = JSON.parse(readFileSync('scan-receipt.json', 'utf8'));
-assert(receipt.source_statuses.some(s => s.source === 'hh' && typeof s.query === 'string' && s.queryId));
-assert.match(pipeline, /https:\/\/hh.ru\/vacancy\/101/);
-assert.match(pipeline, /cross-listed: Habr Career/);
 assert.match(pipeline, /https:\/\/career.habr.com\/vacancies\/201/);
+assert.match(pipeline, /cross-listed: GeekJob/);
 assert.match(pipeline, /https:\/\/geekjob.ru\/vacancy\/000000000000000000000301/);
 assert.match(pipeline, /250000|250,000|250 000/);
 assert.match(history, /ru-market-api/);
 assert.match(pipeline, /https:\/\/getmatch.ru\/vacancies\/601-python-platform-engineer/);
 assert.match(history, /getmatch.ru/);
 assert.match(pipeline, /https:\/\/www.helloworld.rs\/posao\/Data-Engineer/);
-assert(receipt.source_statuses.some(s => s.source === 'helloworld-rs' && s.query === 'Data Engineer'));
 assert(!pipeline.includes('Synthetic description intentionally not copied'));
 console.log('integration: scaffold, audit, consent, scan preview, pipeline and history OK');
+JS
+
+# Cross-entry dedup. core runs entries in parallel, so the winner is the first to finish, not the first in the file;
+# running the HH entry first as its own scan makes HH deterministic: the later ru-market scan drops the company+role duplicate.
+mkdir -p scripts/ru-market
+cat > scripts/ru-market/hh-stub.mjs <<'JS'
+console.log(JSON.stringify({ jobs: [{ title: 'Python Backend Engineer', url: 'https://hh.ru/vacancy/101', company: 'Тестовая компания', source: 'hh',
+  injectionFlags: ['conceal'], salary: { min: 275000, max: 275000, currency: 'RUB' }, compensation: { min: 200000, max: 350000, currency: 'RUB', period: 'month', taxBasis: 'net', rawText: '200 000–350 000 ₽ в месяц на руки' } }] }));
+JS
+cat > portals.yml <<'YAML'
+job_boards:
+  - name: HH browser
+    provider: local-parser
+    careers_url: https://hh.ru/search/vacancy
+    parser:
+      command: node
+      script: scripts/ru-market/hh-stub.mjs
+  - name: RU fixture dedup
+    provider: ru-market
+    ru_market:
+      source: all
+      max_pages: 1
+YAML
+rm -f data/pipeline.md data/scan-history.tsv
+node --import ./preload.mjs scan.mjs --json --company 'HH browser' > dedup-hh.json 2> dedup-hh.log
+node --import ./preload.mjs scan.mjs --json --company 'RU fixture' > dedup-ru.json 2> dedup-ru.log
+node --input-type=module <<'JS'
+import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
+const pipeline = readFileSync('data/pipeline.md', 'utf8');
+assert.match(pipeline, /https:\/\/hh.ru\/vacancy\/101/);
+assert(!pipeline.includes('career.habr.com/vacancies/201'), 'duplicate from ru-market must be dropped, HH kept');
+const ru = JSON.parse(readFileSync('dedup-ru.json', 'utf8'));
+assert.equal(ru.added, 0); assert(ru.duplicates >= 1);
+console.log('integration: HH scanned first keeps its job over the ru-market duplicate; unpatched core accepts the extra fields');
 JS

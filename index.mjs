@@ -1,52 +1,80 @@
+// Plugin entry: the `ru-market` provider for career-ops.
+//
+// Runs every enabled source in parallel, tolerates partial failure, and
+// returns one cross-source de-duplicated job list. The provider contract
+// (hooks, id) is declared in manifest.json and checked by test/smoke.mjs.
 import { parseConfig } from './lib/config.mjs';
-import { fetchHh } from './lib/hh.mjs';
-import { fetchHabr } from './lib/habr-career.mjs';
-import { fetchGeekjob } from './lib/geekjob.mjs';
-import { fetchSuperjob } from './lib/superjob.mjs';
-import { fetchHelloWorld } from './lib/helloworld.mjs';
-import { fetchGetmatch } from './lib/getmatch.mjs';
-import { fetchTrudvsem } from './lib/trudvsem.mjs';
-import { deduplicate } from './lib/dedup.mjs';
+import { fetchHabr } from './lib/providers/habr-career.mjs';
+import { fetchGeekjob } from './lib/providers/geekjob.mjs';
+import { fetchSuperjob } from './lib/providers/superjob.mjs';
+import { fetchHelloWorld } from './lib/providers/helloworld.mjs';
+import { fetchGetmatch } from './lib/providers/getmatch.mjs';
+import { fetchTrudvsem } from './lib/providers/trudvsem.mjs';
+import { deduplicate } from './lib/processors/dedup.mjs';
 import { categoryOf, SourceError } from './lib/errors.mjs';
 
-export const adapters = { hh: fetchHh, 'habr-career': fetchHabr, geekjob: fetchGeekjob, superjob: fetchSuperjob, trudvsem: fetchTrudvsem, getmatch: fetchGetmatch, 'helloworld-rs': fetchHelloWorld };
+/** Source id -> fetch function `(config, ctx) => Promise<Job[]>`. */
+export const adapters = {
+  'habr-career': fetchHabr,
+  geekjob: fetchGeekjob,
+  superjob: fetchSuperjob,
+  trudvsem: fetchTrudvsem,
+  getmatch: fetchGetmatch,
+  'helloworld-rs': fetchHelloWorld,
+};
+
+/**
+ * Fetch all enabled sources.
+ * @param {object} entry portals.yml entry with an `ru_market` block.
+ * @param {any} ctx Guarded plugin context.
+ * @returns {Promise<object[]>} Cross-source de-duplicated jobs.
+ * @throws {SourceError} When every source fails; the single error itself when only one ran.
+ */
+async function fetchAll(entry, ctx) {
+  const config = parseConfig(entry);
+  // LEGACY(parser-pipeline): adapters accept a third `options` argument (health uses it for
+  // `retries: 0`), but the plugin never passes one here.
+  const results = await Promise.allSettled(
+    config.selected.map(id => adapters[id](config.sources[id], ctx)),
+  );
+  const jobs = [];
+  let successes = 0;
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      ctx.log?.(
+        'ru-market',
+        JSON.stringify({
+          source: config.selected[index],
+          category: categoryOf(result.reason),
+          status: 'failed',
+        }),
+      );
+      return;
+    }
+    successes++;
+    jobs.push(...result.value);
+  });
+  if (successes !== 0) {
+    return deduplicate(jobs, config.order);
+  }
+  if (results.length === 1) {
+    throw results[0].reason;
+  }
+  const summary = results
+    .map(
+      (result, index) =>
+        `${config.selected[index]}=${categoryOf(result.reason)}`,
+    )
+    .join(', ');
+  throw new SourceError('sources-failed', `All sources failed: ${summary}`);
+}
+
 export default {
   provider: {
     id: 'ru-market',
-    detect() { return null; },
-    fetch: async (entry, ctx) => {
-      const config = parseConfig(entry);
-      const results = await Promise.allSettled(config.selected.map(id => adapters[id](config.sources[id], ctx)));
-      const jobs = [];
-      const sourceStatuses = [];
-      let successes = 0;
-      const queryStatuses = [];
-      results.forEach((result, index) => {
-        const source = config.selected[index];
-        if (result.status === 'fulfilled') {
-          successes++;
-          jobs.push(...result.value);
-          queryStatuses.push(...(result.value.queryStatuses ?? []));
-          sourceStatuses.push({ source, ...result.value.sourceStatus, count: result.value.length });
-        } else {
-          const category = categoryOf(result.reason);
-          queryStatuses.push(...(result.reason?.queryStatuses ?? []));
-          sourceStatuses.push({ source, status: 'failed', category, completed_pages: 0, count: 0,
-            ...(result.reason?.sourceDiagnostic ?? {}) });
-          ctx.log?.('ru-market', JSON.stringify({ source, category, status: 'failed' }));
-        }
-      });
-      if (!successes) {
-        const error = results.length === 1 ? results[0].reason
-          : new SourceError('sources-failed', `All sources failed: ${results.map((r, i) => `${config.selected[i]}=${categoryOf(r.reason)}`).join(', ')}`);
-        error.sourceStatuses = sourceStatuses;
-        error.queryStatuses = queryStatuses;
-        throw error;
-      }
-      const merged = deduplicate(jobs, config.order);
-      Object.defineProperty(merged, 'sourceStatuses', { value: sourceStatuses });
-      Object.defineProperty(merged, 'queryStatuses', { value: queryStatuses });
-      return merged;
+    detect() {
+      return null;
     },
+    fetch: fetchAll,
   },
 };

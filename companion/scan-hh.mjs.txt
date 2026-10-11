@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Canonical HH listing collector. Anonymous browser; pipeline writes stay in core.
-import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -8,12 +9,73 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { isMainModule } from '../../lib/is-main-module.mjs';
 import { getCareerOpsRoot } from '../../path-resolver.mjs';
-import { parseCompensation } from '../../providers/_compensation.mjs';
-export const TOOL_VERSION = '0.5.0';
-export const CONTRACT_VERSION = 2;
+import { untrusted } from './lib/untrusted.mjs';
+export const TOOL_VERSION = '0.8.0';
+export const CONTRACT_VERSION = 3;
 const clean = s => typeof s === 'string' ? s.replace(/\s+/gu, ' ').trim() : '';
 const diagnostic = (category, message, extra = {}) => Object.assign(new Error(message), { category, ...extra });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const abortInfo = signal => signal?.reason === 'deadline'
+  ? { category: 'timeout', message: 'Collection deadline reached (timeout_ms); partial results returned' }
+  : { category: 'interrupted', message: 'Collection interrupted; resume from checkpoint' };
+// Same parser as lib/processors/compensation.mjs, kept inline because the companion is installed without plugin modules; a test checks parity.
+function normalizeCompensation(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const out = {
+    period: ['month', 'year', 'hour', 'shift'].includes(value.period) ? value.period : 'unknown',
+    taxBasis: ['gross', 'net'].includes(value.taxBasis) ? value.taxBasis : 'unknown',
+    rawText: clean(value.rawText),
+  };
+  if (typeof value.currency === 'string' && /^[A-Z]{3}$/.test(value.currency)) out.currency = value.currency === 'RUR' ? 'RUB' : value.currency;
+  const supplied = ['min', 'max'].filter(k => value[k] !== undefined);
+  const valid = supplied.length && supplied.every(k => typeof value[k] === 'number' && Number.isFinite(value[k]) && value[k] >= 0)
+    && !(value.min !== undefined && value.max !== undefined && value.min > value.max);
+  if (valid && out.currency) for (const key of supplied) out[key] = value[key];
+  else if (supplied.length) out.diagnostic = 'invalid-amount-or-currency';
+  if (typeof value.diagnostic === 'string') out.diagnostic = value.diagnostic;
+  return out;
+}
+export function parseCompensation(rawText, currencyHint) {
+  const raw = clean(rawText);
+  if (!raw) return undefined;
+  const period = /(?:в|за) (?:месяц)|per month|\/month/i.test(raw) ? 'month'
+    : /(?:в|за) год|per year|annual|\/year/i.test(raw) ? 'year'
+    : /(?:в|за) час|per hour|\/hour/i.test(raw) ? 'hour'
+    : /(?:за|в) смену|per shift/i.test(raw) ? 'shift' : 'unknown';
+  const gross = /до вычета налогов|gross/i.test(raw), net = /на руки|net/i.test(raw);
+  const taxBasis = gross && !net ? 'gross' : net && !gross ? 'net' : 'unknown';
+  const detected = /₽|руб|\bRU[BR]\b/i.test(raw) ? 'RUB' : /\$|\bUSD\b/.test(raw) ? 'USD'
+    : /€|\bEUR\b/.test(raw) ? 'EUR' : /₸|\bKZT\b/.test(raw) ? 'KZT' : /\bBYN\b/.test(raw) ? 'BYN' : undefined;
+  const currency = currencyHint === 'RUR' ? 'RUB' : currencyHint || detected;
+  const result = { rawText: raw, period, taxBasis, ...(currency ? { currency } : {}) };
+  // Only the leading amount expression determines a bound; tax prose cannot.
+  const amount = '(\\d+(?: \\d{3})*(?:[.,]\\d+)?)(?:\\s*(тыс\\.?|[kк]))?';
+  const pattern = new RegExp(`^(?:(от|до|from|up to)\\s+)?${amount}(?:\\s*[–—-]\\s*${amount})?\\s*(₽|руб\\.?|RUB|RUR|USD|EUR|KZT|BYN|UZS|GEL|AMD|\\$|€|₸)(?=\\s|$|[,;])`, 'i');
+  const match = pattern.exec(raw);
+  if (!match || !currency || (detected && detected !== currency) || /не указ|договор|прогноз|похож|estimate|predicted/i.test(raw)) {
+    return normalizeCompensation({ ...result, diagnostic: 'ambiguous-amount-or-currency' });
+  }
+  if (period === 'unknown' && /недел|сутк|день|week|day/i.test(raw)) return normalizeCompensation({ ...result, diagnostic: 'unsupported-period' });
+  const number = (n, suffix) => Number(n.replace(/ /g, '').replace(',', '.')) * (suffix ? 1000 : 1);
+  const first = number(match[2], match[3]), second = match[4] ? number(match[4], match[5]) : undefined;
+  const bounds = second !== undefined ? { min: first, max: second }
+    : /^(до|up to)$/i.test(match[1] ?? '') ? { max: first }
+    : /^(от|from)$/i.test(match[1] ?? '') ? { min: first } : { min: first, max: first };
+  return normalizeCompensation({ ...result, ...bounds });
+}
+// `salary` is the midpoint of a complete RUB monthly range; everything else stays only in `compensation`.
+const salaryFrom = c => c?.currency === 'RUB' && c.period === 'month' && c.min !== undefined && c.max !== undefined
+  ? { min: (c.min + c.max) / 2, max: (c.min + c.max) / 2, currency: 'RUB' } : undefined;
+// Same normalisation and flags as the plugin's makeJob; flagged jobs are kept.
+export function sanitizeJob(job) {
+  const flags = new Set(Array.isArray(job.injectionFlags) ? job.injectionFlags.filter(f => typeof f === 'string' && /^[a-z][a-z0-9-]{0,39}$/.test(f)) : []);
+  const safe = (value, field) => { const result = untrusted(value, field); result.flags.forEach(flag => flags.add(flag)); return clean(result.text); };
+  const out = { ...job, title: safe(job.title, 'title'), company: safe(job.company, 'company'), location: safe(job.location, 'location'),
+    locationText: safe(job.locationText, 'location'), note: safe(job.note, 'note') };
+  if (Array.isArray(job.locations)) out.locations = job.locations.map(x => safe(x, 'location')).filter(Boolean);
+  if (flags.size) out.injectionFlags = [...flags].sort(); else delete out.injectionFlags;
+  return out;
+}
 const atomicJson = (path, value) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path + '.tmp', JSON.stringify(value, null, 2) + '\n'); renameSync(path + '.tmp', path); };
 const queryId = (query, index = 0) => `q${String(index + 1).padStart(2, '0')}-${createHash('sha256').update(query).digest('hex').slice(0, 8)}`;
 
@@ -40,14 +102,15 @@ export async function extractHhJobs(page, identity = {}) {
   return raw.map(item => {
     const sourceId = /\/vacancy\/(\d+)/.exec(item.url)?.[1];
     const compensation = parseCompensation(item.salaryText, item.currency);
-    return { title: item.title, url: item.url, company: item.company, source: 'hh', transport: 'playwright', sourceId,
+    const salary = salaryFrom(compensation);
+    return sanitizeJob({ title: item.title, url: item.url, company: item.company, source: 'hh', transport: 'playwright', sourceId,
       locationText: item.locationText, locations: item.locationText ? [item.locationText] : [],
       location: [item.locationText, item.remote ? 'Можно удалённо' : ''].filter(Boolean).join(' / '),
       workArrangement: item.remote ? 'remote' : 'unknown', eligibility: { status: 'unknown' },
       dataLevel: 'listing', hasDescription: false, matchedQueries: identity.query ? [{ query: identity.query, queryId: identity.queryId }] : [],
-      ...(compensation ? { compensation } : {}),
-      note: `source: hh; transport: playwright${item.salaryText ? '; salary: ' + item.salaryText : ''}` };
-  });
+      ...(compensation ? { compensation } : {}), ...(salary ? { salary } : {}),
+      note: `source: hh; transport: playwright${item.salaryText ? '; salary: ' + item.salaryText : ''}` });
+  }).filter(job => job.title);
 }
 
 export function mergeJobs(jobs) {
@@ -68,7 +131,13 @@ export function mergeJobs(jobs) {
       }
     }
   }
-  return [...merged.values()];
+  return [...merged.values()].map(job => {
+    const salary = salaryFrom(job.compensation);
+    if (salary) job.salary = salary; else delete job.salary;
+    const flags = [...new Set(jobs.filter(x => x.url === job.url).flatMap(x => x.injectionFlags ?? []))].sort();
+    if (flags.length) job.injectionFlags = flags;
+    return job;
+  });
 }
 
 export function validateOptions(options) {
@@ -78,7 +147,13 @@ export function validateOptions(options) {
   if (!['chrome', 'chromium'].includes(options.channel)) throw diagnostic('invalid-config', 'channel must be chrome or chromium');
   if (!Number.isInteger(options.retries) || options.retries < 0 || options.retries > 2) throw diagnostic('invalid-config', 'retries must be 0..2');
   if (typeof options.titleOnly !== 'boolean' || typeof options.headed !== 'boolean') throw diagnostic('invalid-config', 'titleOnly and headed must be booleans');
+  if (options.searchField !== undefined && (!Array.isArray(options.searchField) || options.searchField.some(x => !SEARCH_FIELDS.includes(x)))) throw diagnostic('invalid-config', `search_field must be a list of ${SEARCH_FIELDS.join(', ')}`);
+  if (options.excludedText !== undefined && (typeof options.excludedText !== 'string' || !clean(options.excludedText) || clean(options.excludedText).length > 512)) throw diagnostic('invalid-config', 'excluded_text must be 1..512 characters');
+  if (options.professionalRole !== undefined && (!Array.isArray(options.professionalRole) || options.professionalRole.length > 20 || options.professionalRole.some(x => !/^[1-9]\d*$/.test(String(x))))) throw diagnostic('invalid-config', 'professional_role must be a list of up to 20 numeric HH role IDs');
+  if (options.onlyWithSalary !== undefined && typeof options.onlyWithSalary !== 'boolean') throw diagnostic('invalid-config', 'only_with_salary must be boolean');
+  if (options.timeoutMs !== undefined && (!Number.isInteger(options.timeoutMs) || options.timeoutMs < 1000 || options.timeoutMs > 3_600_000)) throw diagnostic('invalid-config', 'timeout_ms must be an integer from 1000 to 3600000');
 }
+const SEARCH_FIELDS = ['name', 'company_name', 'description'];
 export async function preflight({ channel = 'chrome', headed = false, launch } = {}) {
   if (!['chrome', 'chromium'].includes(channel) || typeof headed !== 'boolean') throw diagnostic('invalid-config', 'Invalid browser channel or headed flag');
   let chromium;
@@ -100,26 +175,31 @@ function classify(error) {
     message: clean(error.category ? error.message : `${error.name || 'Error'} while collecting HH listings`).slice(0, 240),
     ...(Number.isInteger(error.http_status) ? { http_status: error.http_status } : {}) };
 }
-const statusBase = options => ({ source: 'hh', transport: 'playwright', query: options.query, queryId: options.queryId ?? queryId(clean(options.query)), completed_pages: 0, count: 0 });
-const envelope = (jobs, statuses, extra = {}) => ({ contractVersion: CONTRACT_VERSION, toolVersion: TOOL_VERSION, jobs, sourceStatuses: statuses, ...extra });
+// Per-query collection state lives only in checkpoint.json, query-XX.json, queries-summary.json and stderr; it is not part of the stdout envelope.
+const stateBase = options => ({ source: 'hh', transport: 'playwright', query: options.query, queryId: options.queryId ?? queryId(clean(options.query)), completed_pages: 0, count: 0 });
+const envelope = (jobs, extra = {}) => ({ contractVersion: CONTRACT_VERSION, toolVersion: TOOL_VERSION, jobs, ...extra });
+const report = state => { if (state.status !== 'ok') console.error(`HH ${state.queryId}: ${state.status} (${state.category}) after ${state.completed_pages} page(s): ${state.message}`); };
 
 export async function searchHh(input) {
   const options = { pages: 1, channel: 'chrome', titleOnly: false, headed: false, retries: 0, ...input };
-  const status = statusBase(options);
+  const state = stateBase(options);
   let browser, context, page, ownBrowser = false;
   let jobs = input.initial?.jobs ?? [], start = input.initial?.completed_pages ?? 0;
-  status.completed_pages = start;
+  state.completed_pages = start;
   try {
     validateOptions(options);
     browser = input.browser ?? await preflight(options); ownBrowser = !input.browser;
     context = input.context ?? (browser.newContext ? await browser.newContext({ locale: 'ru-RU', serviceWorkers: 'block' }) : browser);
     page = await context.newPage();
     for (let index = start; index < options.pages; index++) {
-      if (options.signal?.aborted) throw diagnostic('interrupted', 'Collection interrupted; resume from checkpoint');
+      if (options.signal?.aborted) { const info = abortInfo(options.signal); throw diagnostic(info.category, info.message); }
       const url = new URL('https://hh.ru/search/vacancy');
       url.searchParams.set('text', options.query); url.searchParams.set('page', String(index));
       if (options.area) url.searchParams.set('area', String(options.area));
-      if (options.titleOnly) url.searchParams.set('search_field', 'name');
+      for (const field of new Set([...(options.titleOnly ? ['name'] : []), ...(options.searchField ?? [])])) url.searchParams.append('search_field', field);
+      if (options.excludedText) url.searchParams.set('excluded_text', clean(options.excludedText));
+      for (const role of options.professionalRole ?? []) url.searchParams.append('professional_role', String(role));
+      if (options.onlyWithSalary) url.searchParams.set('only_with_salary', 'true');
       let found, hasNext;
       for (let attempt = 0; ; attempt++) {
         try {
@@ -137,7 +217,7 @@ export async function searchHh(input) {
           }
           const body = await page.locator('body').innerText();
           if (/captcha|access denied|проверка.*человек|подтвердите.*человек/i.test(body)) throw diagnostic('access', 'HH access challenge; collection stopped');
-          found = await extractHhJobs(page, { query: options.query, queryId: status.queryId });
+          found = await extractHhJobs(page, { query: options.query, queryId: state.queryId });
           const explicitEmpty = /ничего не найдено|вакансий не найдено/i.test(body)
             || await page.locator('[data-qa="vacancy-serp__no-results"], [data-qa="vacancy-serp__empty"]').count() > 0;
           if (!found.length && !explicitEmpty) throw diagnostic('broken-markup', 'HH markup changed: no valid vacancy cards');
@@ -148,23 +228,26 @@ export async function searchHh(input) {
           await sleep(500 * (attempt + 1));
         }
       }
-      jobs = mergeJobs([...jobs, ...found]); status.completed_pages++; status.count = jobs.length;
-      status.status = 'ok'; status.stop_reason = hasNext ? 'page-limit' : found.length ? 'exhausted' : 'empty';
-      await input.onCheckpoint?.({ jobs, ...status });
-      console.error(`HH ${status.queryId} page ${index + 1}: ${found.length} vacancies`);
+      jobs = mergeJobs([...jobs, ...found]); state.completed_pages++; state.count = jobs.length;
+      state.status = 'ok'; state.stop_reason = hasNext ? 'page-limit' : found.length ? 'exhausted' : 'empty';
+      await input.onCheckpoint?.({ jobs, ...state });
+      console.error(`HH ${state.queryId} page ${index + 1}: ${found.length} vacancies`);
       if (!hasNext) break;
       if (index + 1 < options.pages) await (page.waitForTimeout?.(1000) ?? sleep(1000));
     }
-    status.status = 'ok'; status.stop_reason ??= 'page-limit';
+    state.status = 'ok'; state.stop_reason ??= 'page-limit';
   } catch (error) {
-    Object.assign(status, { status: status.completed_pages ? 'partial' : 'failed', failed_page: status.completed_pages + 1, ...classify(error) });
+    Object.assign(state, { status: state.completed_pages ? 'partial' : 'failed', failed_page: state.completed_pages + 1, ...classify(error) });
   } finally {
     await page?.close?.().catch(() => {});
     if (!input.context && context && context !== browser) await context.close().catch(() => {});
     if (ownBrowser) await browser?.close().catch(() => {});
   }
-  status.count = jobs.length;
-  return envelope(jobs, [status]);
+  state.count = jobs.length;
+  const flagged = jobs.filter(job => job.injectionFlags?.length).length;
+  if (flagged) state.injection_flagged = flagged;
+  report(state);
+  return { jobs, state };
 }
 
 export async function loadBatchConfig(path, entryName, dataRoot = getCareerOpsRoot()) {
@@ -174,12 +257,23 @@ export async function loadBatchConfig(path, entryName, dataRoot = getCareerOpsRo
   try { data = load(readFileSync(file, 'utf8')); } catch { throw diagnostic('invalid-config', 'Cannot read or parse selected YAML config'); }
   if (!data || typeof data !== 'object') throw diagnostic('invalid-config', 'Config must be an object');
   const scannerConfig = Object.fromEntries(Object.entries(data).filter(([key]) => !['hh_browser', 'job_boards', 'tracked_companies'].includes(key)));
-  if (data.hh_browser) return { ...data.hh_browser, scannerConfig, configFile: file };
-  const candidates = [...(data.job_boards ?? []), ...(data.tracked_companies ?? [])].filter(entry => entry.ru_market?.sources?.hh && (!entryName || entry.name === entryName));
-  if (candidates.length !== 1) throw diagnostic('invalid-config', 'Select one HH config entry with --entry, or provide hh_browser config');
-  const hh = candidates[0].ru_market.sources.hh;
-  return { queries: hh.queries, pages: hh.max_pages ?? candidates[0].ru_market.max_pages ?? 1, area: hh.area || undefined,
-    titleOnly: hh.title_only ?? false, channel: 'chrome', scannerConfig, configFile: file };
+  const block = data.hh_browser ?? (() => {
+    const candidates = [...(data.job_boards ?? []), ...(data.tracked_companies ?? [])].filter(entry => entry?.hh_browser && (!entryName || entry.name === entryName));
+    if (candidates.length !== 1) throw diagnostic('invalid-config', 'Select one entry containing hh_browser with --entry, or provide a top-level hh_browser block');
+    return candidates[0].hh_browser;
+  })();
+  return { ...blockOptions(block), scannerConfig, configFile: file };
+}
+
+const BLOCK_KEYS = new Set(['queries', 'pages', 'area', 'titleOnly', 'channel', 'headed', 'retries', 'artifactDir', 'search_field', 'excluded_text', 'professional_role', 'only_with_salary', 'timeout_ms']);
+function blockOptions(block) {
+  if (!block || typeof block !== 'object' || Array.isArray(block)) throw diagnostic('invalid-config', 'hh_browser must be an object');
+  for (const key of Object.keys(block)) if (!BLOCK_KEYS.has(key)) throw diagnostic('invalid-config', `Unsupported hh_browser option: ${key}`);
+  const { search_field, excluded_text, professional_role, only_with_salary, timeout_ms, ...rest } = block;
+  const list = value => (Array.isArray(value) ? value : [value]).map(String);
+  return { ...rest, ...(search_field !== undefined ? { searchField: list(search_field) } : {}),
+    ...(excluded_text !== undefined ? { excludedText: excluded_text } : {}), ...(professional_role !== undefined ? { professionalRole: list(professional_role) } : {}),
+    ...(only_with_salary !== undefined ? { onlyWithSalary: only_with_salary } : {}), ...(timeout_ms !== undefined ? { timeoutMs: timeout_ms } : {}) };
 }
 
 export async function collectBatch(input) {
@@ -192,7 +286,8 @@ export async function collectBatch(input) {
   const folder = resolve(dataRoot, options.artifactDir ?? `data/scan-output/hh-${new Date().toISOString().slice(0, 10)}`);
   const checkpointPath = resolve(folder, 'checkpoint.json');
   const parameters = { queries: options.queries, pages: options.pages, area: options.area ?? '', titleOnly: options.titleOnly,
-    channel: options.channel, headed: options.headed, retries: options.retries };
+    channel: options.channel, headed: options.headed, retries: options.retries, searchField: [...(options.searchField ?? [])].sort(),
+    excludedText: options.excludedText ?? '', professionalRole: [...(options.professionalRole ?? [])].map(String).sort(), onlyWithSalary: options.onlyWithSalary ?? false };
   const signature = createHash('sha256').update(JSON.stringify(parameters)).digest('hex');
   let checkpoint = { contractVersion: CONTRACT_VERSION, toolVersion: TOOL_VERSION, signature, parameters, queries: {} };
   if (existsSync(checkpointPath)) {
@@ -213,29 +308,31 @@ export async function collectBatch(input) {
     for (const [index, query] of options.queries.entries()) {
       const id = queryId(query, index), old = checkpoint.queries[id];
       let result;
-      if (old?.status === 'ok') result = envelope(old.jobs, [{ ...old, jobs: undefined }]);
+      if (old?.status === 'ok') result = { jobs: old.jobs, state: { ...old, jobs: undefined } };
       else if (blocked || options.signal?.aborted || launchFailure) {
-        const state = { ...statusBase({ query, queryId: id }), completed_pages: old?.completed_pages ?? 0, count: old?.jobs?.length ?? 0, status: launchFailure && !results.length ? 'failed' : 'skipped', category: blocked ? 'access' : options.signal?.aborted ? 'interrupted' : launchFailure.category,
-          message: blocked ? 'Skipped after HH access block' : options.signal?.aborted ? 'Collection interrupted' : launchFailure.message };
-        result = envelope(old?.jobs ?? [], [state]);
+        const stop = abortInfo(options.signal);
+        const state = { ...stateBase({ query, queryId: id }), completed_pages: old?.completed_pages ?? 0, count: old?.jobs?.length ?? 0, status: launchFailure && !results.length ? 'failed' : 'skipped', category: blocked ? 'access' : options.signal?.aborted ? stop.category : launchFailure.category,
+          message: blocked ? 'Skipped after HH access block' : options.signal?.aborted ? stop.message : launchFailure.message };
+        report(state);
+        result = { jobs: old?.jobs ?? [], state };
       } else {
         result = await searchHh({ ...options, query, queryId: id, browser, context, initial: old,
           onCheckpoint: state => { checkpoint.queries[id] = { ...state, status: state.completed_pages >= options.pages || state.stop_reason !== 'page-limit' ? 'ok' : 'running' }; save(); } });
       }
-      const status = result.sourceStatuses[0];
-      checkpoint.queries[id] = { ...status, jobs: result.jobs }; save();
-      atomicJson(resolve(folder, `query-${String(index + 1).padStart(2, '0')}.json`), result);
+      checkpoint.queries[id] = { ...result.state, jobs: result.jobs }; save();
+      atomicJson(resolve(folder, `query-${String(index + 1).padStart(2, '0')}.json`), envelope(result.jobs, { query: result.state }));
       results.push(result);
-      if (status.category === 'access') blocked = true;
+      if (result.state.category === 'access') blocked = true;
       if (index + 1 < options.queries.length && !blocked && browser) await (options.wait ?? sleep)(1000);
     }
   } finally {
     if (context && context !== browser) await context.close().catch(() => {});
     await browser?.close().catch(() => {});
   }
-  const result = envelope(mergeJobs(results.flatMap(r => r.jobs)), results.flatMap(r => r.sourceStatuses), { parameters, artifactDir: folder });
+  const result = envelope(mergeJobs(results.flatMap(r => r.jobs)), { parameters, artifactDir: folder });
+  const states = results.map(r => r.state);
   atomicJson(resolve(folder, 'merged.json'), result);
-  atomicJson(resolve(folder, 'queries-summary.json'), { ...result, jobs: undefined });
+  atomicJson(resolve(folder, 'queries-summary.json'), { ...result, jobs: undefined, count: result.jobs.length, queries: states });
   // Same executable imports the cache; no generated JavaScript adapters.
   const portals = { ...options.scannerConfig, tracked_companies: [], job_boards: [{ name: 'HH browser cache', provider: 'local-parser', careers_url: 'https://hh.ru/search/vacancy',
     parser: { command: 'node', script: 'scripts/ru-market/scan-hh.mjs', args: ['--import-cache', resolve(folder, 'merged.json')], timeout_ms: 20000, max_buffer_bytes: 10000000 } }] };
@@ -253,45 +350,73 @@ export async function collectBatch(input) {
     catch { throw diagnostic('scan-import', 'Core did not return a JSON scan receipt; see scan.log'); }
     atomicJson(resolve(folder, 'scan-receipt.json'), result.scanReceipt);
   }
-  return result;
+  return { result, states };
 }
 
 export function readCache(path) {
   const data = JSON.parse(readFileSync(path, 'utf8'));
-  if (data.contractVersion !== CONTRACT_VERSION || !Array.isArray(data.jobs) || !Array.isArray(data.sourceStatuses)) throw diagnostic('invalid-config', 'Invalid HH cache contract');
+  if (data.contractVersion !== CONTRACT_VERSION) throw diagnostic('invalid-config', `Unsupported HH cache contract version ${data.contractVersion} (expected ${CONTRACT_VERSION}); regenerate the cache`);
+  if (!Array.isArray(data.jobs)) throw diagnostic('invalid-config', 'Invalid HH cache contract');
   const valid = data.jobs.every(j => j.source === 'hh' && typeof j.title === 'string' && /^https:\/\/hh\.ru\/vacancy\/[1-9]\d*$/.test(j.url));
   if (!valid) throw diagnostic('invalid-config', 'Cache contains invalid HH job URLs or metadata');
-  return data;
+  return { ...data, jobs: data.jobs.map(sanitizeJob).filter(job => job.title) };
 }
 
-async function main() {
-  const args = process.argv.slice(2), options = {};
+export async function main(args = process.argv.slice(2), deps = {}) {
+  const options = {}, write = deps.write ?? (text => process.stdout.write(text));
   if (args.includes('--help')) {
-    console.log('HH tool ' + TOOL_VERSION + ': --query TEXT | --config FILE [--entry NAME] | --import-cache FILE | --preflight; [--pages 1..20] [--area ID] [--title-only] [--channel chrome|chromium] [--artifact-dir DIR] [--resume] [--retries 0..2] [--output FILE] [--scan [--dry-run]]'); return;
+    write('HH tool ' + TOOL_VERSION + ': --query TEXT | --config FILE [--entry NAME] | --import-cache FILE | --preflight; [--pages 1..20] [--area ID] [--title-only] [--search-field name,company_name,description] [--excluded-text TEXT] [--professional-role ID,ID] [--only-with-salary] [--timeout-ms MS] [--channel chrome|chromium] [--artifact-dir DIR | --no-artifacts] [--resume] [--retries 0..2] [--output FILE] [--scan [--dry-run]]\n'); return { exitCode: 0 };
   }
-  if (args.includes('--version')) { console.log(TOOL_VERSION); return; }
+  if (args.includes('--version')) { write(TOOL_VERSION + '\n'); return { exitCode: 0 }; }
   const flags = { '--query': 'query', '--config': 'config', '--entry': 'entry', '--pages': 'pages', '--area': 'area', '--channel': 'channel',
-    '--artifact-dir': 'artifactDir', '--output': 'output', '--import-cache': 'cache', '--retries': 'retries' };
+    '--artifact-dir': 'artifactDir', '--output': 'output', '--import-cache': 'cache', '--retries': 'retries', '--search-field': 'searchField',
+    '--excluded-text': 'excludedText', '--professional-role': 'professionalRole', '--timeout-ms': 'timeoutMs' };
+  const switches = { '--title-only': 'titleOnly', '--headed': 'headed', '--resume': 'resume', '--preflight': 'preflight', '--scan': 'scan', '--dry-run': 'dryRun',
+    '--only-with-salary': 'onlyWithSalary', '--no-artifacts': 'noArtifacts' };
   for (let i = 0; i < args.length; i++) {
     const key = args[i];
-    if (['--title-only', '--headed', '--resume', '--preflight', '--scan', '--dry-run'].includes(key)) options[{ '--title-only': 'titleOnly', '--headed': 'headed', '--resume': 'resume', '--preflight': 'preflight', '--scan': 'scan', '--dry-run': 'dryRun' }[key]] = true;
+    if (switches[key]) options[switches[key]] = true;
     else if (flags[key]) { if (!args[i + 1] || args[i + 1].startsWith('--')) throw diagnostic('invalid-config', key + ' requires a value'); options[flags[key]] = args[++i]; }
     else throw diagnostic('invalid-config', 'Unknown option: ' + key);
   }
-  for (const key of ['pages', 'retries']) if (options[key] !== undefined) options[key] = Number(options[key]);
-  const controller = new AbortController(); process.once('SIGINT', () => controller.abort()); process.once('SIGTERM', () => controller.abort());
-  if (options.scan && !options.config) throw diagnostic('invalid-config', '--scan requires --config');
-  if ([options.query, options.config, options.cache, options.preflight].filter(Boolean).length > 1) throw diagnostic('invalid-config', 'Select one query/config/cache/preflight route');
-  let result;
-  if (options.cache) result = readCache(resolve(getCareerOpsRoot(), options.cache));
-  else if (options.preflight) { const browser = await preflight(options); await browser.close(); result = envelope([], [], { preflight: 'ok' }); }
-  else if (options.config) result = await collectBatch({ ...await loadBatchConfig(options.config, options.entry), ...options, signal: controller.signal });
-  else result = await searchHh({ ...options, signal: controller.signal });
-  if (options.output) atomicJson(resolve(getCareerOpsRoot(), options.output), result);
-  process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-  if (!options.cache && result.sourceStatuses.some(s => s.status !== 'ok')) process.exitCode = 1;
+  for (const key of ['pages', 'retries', 'timeoutMs']) if (options[key] !== undefined) options[key] = Number(options[key]);
+  for (const key of ['searchField', 'professionalRole']) if (options[key] !== undefined) options[key] = options[key].split(',').map(x => x.trim()).filter(Boolean);
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  process.once('SIGINT', abort); process.once('SIGTERM', abort);
+  let timer, temp;
+  const arm = ms => { if (!timer && Number.isInteger(ms) && ms >= 1000) timer = setTimeout(() => controller.abort('deadline'), ms); };
+  arm(options.timeoutMs);
+  try {
+    if (options.scan && !options.config) throw diagnostic('invalid-config', '--scan requires --config');
+    if (options.noArtifacts && (options.scan || options.artifactDir || options.resume || !options.config)) throw diagnostic('invalid-config', '--no-artifacts only combines with --config and no --scan, --artifact-dir or --resume');
+    if ([options.query, options.config, options.cache, options.preflight].filter(Boolean).length > 1) throw diagnostic('invalid-config', 'Select one query/config/cache/preflight route');
+    const common = { launch: deps.launch, signal: controller.signal };
+    let result, states = [];
+    if (options.cache) result = readCache(resolve(getCareerOpsRoot(), options.cache));
+    else if (options.preflight) { const browser = await preflight({ ...options, launch: deps.launch }); await browser.close(); result = envelope([], { preflight: 'ok' }); }
+    else if (options.config) {
+      const config = await loadBatchConfig(options.config, options.entry);
+      if (options.noArtifacts) { temp = mkdtempSync(resolve(tmpdir(), 'hh-run-')); options.artifactDir = temp; }
+      const merged = { ...config, ...options, ...common };
+      arm(merged.timeoutMs);
+      ({ result, states } = await collectBatch(merged));
+      if (temp) delete result.artifactDir;
+    } else { const run = await searchHh({ ...options, ...common }); result = envelope(run.jobs); states = [run.state]; }
+    if (options.output) atomicJson(resolve(getCareerOpsRoot(), options.output), result);
+    write(JSON.stringify(result, null, 2) + '\n');
+    // Partial or blocked collection is reported on stderr and in the artifact files, exit 0, so core still imports the jobs found;
+    // only configuration errors and an incomplete --scan run are nonzero.
+    const failed = states.some(s => s.status !== 'ok');
+    return { result, states, exitCode: (options.scan && failed) || states.some(s => s.category === 'invalid-config') ? 1 : 0 };
+  } finally {
+    clearTimeout(timer); process.removeListener('SIGINT', abort); process.removeListener('SIGTERM', abort);
+    if (temp) rmSync(temp, { recursive: true, force: true });
+  }
 }
-if (isMainModule(import.meta.url)) main().catch(error => {
-  process.stdout.write(JSON.stringify(envelope([], [{ source: 'hh', transport: 'playwright', status: 'failed', completed_pages: 0, count: 0, ...classify(error) }])) + '\n');
+if (isMainModule(import.meta.url)) main().then(({ exitCode }) => { process.exitCode = exitCode; }, error => {
+  const failure = classify(error);
+  console.error(`HH: ${failure.category}: ${failure.message}`);
+  process.stdout.write(JSON.stringify(envelope([])) + '\n');
   process.exitCode = 1;
 });
