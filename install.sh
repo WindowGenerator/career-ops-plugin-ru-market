@@ -18,7 +18,6 @@ fi
 work_tmp=$(mktemp -d "${TMPDIR:-/tmp}/ru-market-install.XXXXXX")
 tool_tmp="$work_tmp/scan-hh.mjs"
 lib_tmp="$work_tmp/untrusted.mjs"
-companion_tmp="$work_tmp/core-contract.patch"
 restore_plugin=false
 cleanup() {
   status=$?
@@ -75,43 +74,6 @@ if (existsSync(shared)) {
 
 JS
 
-# Full contract patch includes source statuses, explicit compensation and formatter.
-curl --fail --location --silent --show-error \
-  "https://raw.githubusercontent.com/WindowGenerator/career-ops-plugin-ru-market/$release_sha/companion/core-contract.patch" \
-  --output "$companion_tmp"
-if git apply --reverse --check "$companion_tmp" 2>/dev/null; then
-  echo 'Core compensation contract already applied.'
-elif git apply --check "$companion_tmp" 2>/dev/null; then
-  git apply "$companion_tmp"
-  echo 'Applied core compensation contract.'
-else
-  # Upgrade a previously shipped patch (0.6.0 contract or the older local-parser one), restoring it on failure.
-  upgraded=false
-  for previous in core-contract-0.6.patch local-parser.patch; do
-    legacy_tmp="$work_tmp/$previous"
-    curl --fail --location --silent --show-error \
-      "https://raw.githubusercontent.com/WindowGenerator/career-ops-plugin-ru-market/$release_sha/companion/$previous" \
-      --output "$legacy_tmp"
-    if git apply --reverse --check "$legacy_tmp" 2>/dev/null; then
-      git apply --reverse "$legacy_tmp"
-      if git apply --check "$companion_tmp" 2>/dev/null; then
-        git apply "$companion_tmp"
-        echo 'Upgraded core contract.'
-        upgraded=true
-      else
-        git apply "$legacy_tmp"
-        echo 'Core patch incompatible; previous core extension restored. Core updates may require reinstalling the patch.' >&2
-        exit 1
-      fi
-      break
-    fi
-  done
-  if [ "$upgraded" != true ]; then
-    echo 'Cannot apply core contract cleanly; preserve/reconcile core edits first. Core updates may require reinstalling the patch.' >&2
-    exit 1
-  fi
-fi
-
 node --input-type=module - "$tool_tmp" "$release_sha" "$lib_tmp" <<'JS'
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -125,7 +87,7 @@ for (const [path, data] of [[shared, library], [target, content]]) {
   renameSync(`${path}.tmp`, path);
 }
 writeFileSync(state, JSON.stringify({ release: process.argv[3], sha256: hash(content), files: { 'lib/untrusted.mjs': hash(library) } }) + '\n');
-console.log(`Installed ${target} and ${shared}; configure provider: local-parser separately. Core updates may require reinstalling the core patch.`);
+console.log(`Installed ${target} and ${shared}; configure provider: local-parser separately.`);
 JS
 
 # The core CLI requires removal before add. Save its state so a failed clone,

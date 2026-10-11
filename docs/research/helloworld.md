@@ -85,10 +85,10 @@ The current [parseSalary](../../lib/normalize.mjs) and [parseCompensation](../..
 
 ### What core preserves and what it does not yet support
 
-The current sibling core checkout and the shipped [companion/core-contract.patch](../../companion/core-contract.patch) were checked, not a promise of compatibility with any upstream version.
+The current sibling core checkout and the shipped `companion/core-contract.patch` (deleted in 0.8.0) were checked, not a promise of compatibility with any upstream version.
 
 - The direct plugin provider passes the `hook.fetch` result without field projection: core `plugins/_engine.mjs`. Unknown fields may reach scan, but this creates no filtering or interface storage.
-- The patched core `providers/local-parser.mjs` explicitly passes `locationText`, `locations`, `workArrangement`, `sourceId`, `compensation`, `matchedQueries`, `hasDescription`, `dataLevel`; `eligibility` is passed only with status `unknown`. Top-level `seniority`, `skills` or `tags` are absent from the allowlist and are lost on this path. The same is visible in the [shipped patch](../../companion/core-contract.patch).
+- The patched core `providers/local-parser.mjs` explicitly passes `locationText`, `locations`, `workArrangement`, `sourceId`, `compensation`, `matchedQueries`, `hasDescription`, `dataLevel`; `eligibility` is passed only with status `unknown`. Top-level `seniority`, `skills` or `tags` are absent from the allowlist and are lost on this path. The same is visible in the shipped patch (deleted in 0.8.0).
 - In core `scan.mjs` the location filter reads `job.location`, country eligibility reads `job.description`, salary reads `job.salary` together with `job.compensation`. One new structural field is not enough to change selection. There is no basis to claim that card technologies already take part in content filters.
 - The shared `makeJob` does not yet copy seniority/skills from its input. Simply adding them to the call is not enough. See [lib/normalize.mjs](../../lib/normalize.mjs).
 
@@ -168,7 +168,7 @@ A live request of the implemented adapter with `q=Python`, one page: 30 vacancie
 - [Bel-Dev card 760224](https://www.helloworld.rs/posao/Data-Engineer/Bel-Dev-d.o.o/760224)
 - [robots.txt](https://www.helloworld.rs/robots.txt)
 - [Terms of use](https://www.helloworld.rs/uslovi-koriscenja) and [older indexed terms](https://helloworld.rs/uslovi-koriscenja)
-- Repository code: [lib/normalize.mjs](../../lib/normalize.mjs), [lib/compensation.mjs](../../lib/compensation.mjs), [lib/paginate.mjs](../../lib/paginate.mjs), [lib/dedup.mjs](../../lib/dedup.mjs), [companion/core-contract.patch](../../companion/core-contract.patch)
+- Repository code: [lib/normalize.mjs](../../lib/normalize.mjs), [lib/compensation.mjs](../../lib/compensation.mjs), [lib/paginate.mjs](../../lib/paginate.mjs), [lib/dedup.mjs](../../lib/dedup.mjs), `companion/core-contract.patch` (deleted in 0.8.0)
 - Core checkout (read-only, outside this repository): `career-ops/plugins/_engine.mjs`, `providers/local-parser.mjs`, `scan.mjs`, `title-keywords.mjs`, `classify-tier.mjs`, `tests/classify-tier-position.test.mjs`, `tests/content-filter-word-prefix.test.mjs`
 
 ## Conclusion
