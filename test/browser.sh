@@ -4,8 +4,8 @@ plugin_root="$(cd "$(dirname "$0")/.." && pwd)"
 core_root="${CAREER_OPS_ROOT:-$plugin_root/../career-ops}"
 fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/hh-browser.XXXXXX")"
 trap 'rm -rf "$fixture_root"' EXIT
-# Stock upstream career-ops, never patched: CAREER_OPS_ROOT must be an unmodified checkout (CI pins the commit).
-git -C "$core_root" archive "${CAREER_OPS_REF:-HEAD}" | tar -xf - -C "$fixture_root"
+# Stock upstream career-ops, never patched: CAREER_OPS_ROOT must be an unmodified checkout (default: the commit pinned in .github/workflows/test.yml; override with CAREER_OPS_REF).
+git -C "$core_root" archive "${CAREER_OPS_REF:-95709261abfd3679b7cbc91f53f6e486d41cffa7}" | tar -xf - -C "$fixture_root"
 ln -s "$core_root/node_modules" "$fixture_root/node_modules"
 mkdir -p "$fixture_root/scripts/ru-market/lib" "$fixture_root/tests"
 cp "$plugin_root/companion/scan-hh.mjs.txt" "$fixture_root/scripts/ru-market/scan-hh.mjs"

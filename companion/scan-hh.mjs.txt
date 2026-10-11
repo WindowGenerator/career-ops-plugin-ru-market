@@ -19,13 +19,12 @@ const abortInfo = signal => signal?.reason === 'deadline'
   ? { category: 'timeout', message: 'Collection deadline reached (timeout_ms); partial results returned' }
   : { category: 'interrupted', message: 'Collection interrupted; resume from checkpoint' };
 // Same parser as lib/compensation.mjs, kept inline because the companion is installed without plugin modules; a test checks parity.
-const tidy = value => typeof value === 'string' ? value.replace(/\s+/gu, ' ').trim() : '';
 function normalizeCompensation(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const out = {
     period: ['month', 'year', 'hour', 'shift'].includes(value.period) ? value.period : 'unknown',
     taxBasis: ['gross', 'net'].includes(value.taxBasis) ? value.taxBasis : 'unknown',
-    rawText: tidy(value.rawText),
+    rawText: clean(value.rawText),
   };
   if (typeof value.currency === 'string' && /^[A-Z]{3}$/.test(value.currency)) out.currency = value.currency === 'RUR' ? 'RUB' : value.currency;
   const supplied = ['min', 'max'].filter(k => value[k] !== undefined);
@@ -37,7 +36,7 @@ function normalizeCompensation(value) {
   return out;
 }
 export function parseCompensation(rawText, currencyHint) {
-  const raw = tidy(rawText);
+  const raw = clean(rawText);
   if (!raw) return undefined;
   const period = /(?:в|за) (?:месяц)|per month|\/month/i.test(raw) ? 'month'
     : /(?:в|за) год|per year|annual|\/year/i.test(raw) ? 'year'
@@ -416,7 +415,8 @@ export async function main(args = process.argv.slice(2), deps = {}) {
   }
 }
 if (isMainModule(import.meta.url)) main().then(({ exitCode }) => { process.exitCode = exitCode; }, error => {
-  console.error(`HH: ${classify(error).category}: ${classify(error).message}`);
+  const failure = classify(error);
+  console.error(`HH: ${failure.category}: ${failure.message}`);
   process.stdout.write(JSON.stringify(envelope([])) + '\n');
   process.exitCode = 1;
 });

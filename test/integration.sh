@@ -6,8 +6,8 @@ core_root="${CAREER_OPS_ROOT:-$plugin_root/../career-ops}"
 core_root="$(cd "$core_root" && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/ru-market-integration.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
-# Stock upstream career-ops, never patched: CAREER_OPS_ROOT must be an unmodified checkout (CI pins the commit).
-git -C "$core_root" archive "${CAREER_OPS_REF:-HEAD}" | tar -x -C "$test_root"
+# Stock upstream career-ops, never patched: CAREER_OPS_ROOT must be an unmodified checkout (default: the commit pinned in .github/workflows/test.yml; override with CAREER_OPS_REF).
+git -C "$core_root" archive "${CAREER_OPS_REF:-95709261abfd3679b7cbc91f53f6e486d41cffa7}" | tar -x -C "$test_root"
 ln -s "$core_root/node_modules" "$test_root/node_modules"
 cd "$test_root"
 export CAREER_OPS_ROOT="$test_root"
