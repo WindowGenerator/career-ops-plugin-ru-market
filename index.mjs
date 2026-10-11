@@ -24,26 +24,6 @@ export const adapters = {
 };
 
 /**
- * Log a failed source by category only; the error text may contain source data.
- * @param {any} ctx
- * @param {string} source
- * @param {unknown} reason
- */
-function logSourceFailure(ctx, source, reason) {
-  ctx.log?.('ru-market', JSON.stringify({ source, category: categoryOf(reason), status: 'failed' }));
-}
-
-/**
- * @param {string[]} selected Source ids, in the order of `results`.
- * @param {PromiseSettledResult<unknown>[]} results
- * @returns {SourceError} Error that summarises every failed source.
- */
-function allSourcesFailed(selected, results) {
-  const summary = results.map((result, index) => `${selected[index]}=${categoryOf(result.reason)}`).join(', ');
-  return new SourceError('sources-failed', `All sources failed: ${summary}`);
-}
-
-/**
  * Fetch all enabled sources.
  * @param {object} entry portals.yml entry with an `ru_market` block.
  * @param {any} ctx Guarded plugin context.
@@ -58,17 +38,21 @@ async function fetchAll(entry, ctx) {
   const jobs = [];
   let successes = 0;
   results.forEach((result, index) => {
-    if (result.status === 'fulfilled') {
-      successes++;
-      jobs.push(...result.value);
-    } else {
-      logSourceFailure(ctx, config.selected[index], result.reason);
+    if (result.status === 'rejected') {
+      ctx.log?.('ru-market', JSON.stringify({ source: config.selected[index], category: categoryOf(result.reason), status: 'failed' }));
+      return;
     }
+    successes++;
+    jobs.push(...result.value);
   });
-  if (!successes) {
-    throw results.length === 1 ? results[0].reason : allSourcesFailed(config.selected, results);
+  if (successes !== 0) {
+    return deduplicate(jobs, config.order);
   }
-  return deduplicate(jobs, config.order);
+  if (results.length === 1) {
+    throw results[0].reason;
+  }
+  const summary = results.map((result, index) => `${config.selected[index]}=${categoryOf(result.reason)}`).join(', ');
+  throw new SourceError('sources-failed', `All sources failed: ${summary}`);
 }
 
 export default {
