@@ -76,7 +76,7 @@ The public HTML listing is technically verified. The [research](../research/hell
 
 ### Stage 2. HTML adapter and bounded requests
 
-- [x] Add `lib/helloworld.mjs` with separate listing parsing and page fetching, using the existing HTML utilities, queue, retry and `paginate`.
+- [x] Add `lib/providers/helloworld.mjs` with separate listing parsing and page fetching, using the existing HTML utilities, queue, retry and `paginate`.
 - [x] Send phrases through `q`. The `/python/` path is a site technology filter, not equivalent to keyword search. Keep the matched queries in `matchedQueries`.
 - [x] Follow the verified next-page link with offsets 0, 30 and onward; validate origin, route, preservation of the original query and offset progress. Bound traversal by `max_pages`, detect a repeated page/link, mark reaching the limit in diagnostics.
 - [x] Parse only vacancy cards: title, employer, place/mode, salary, separate seniority and technology labels. Exclude ratings, benefits and advertising from fields. Do not treat arbitrary HTML as an empty result.

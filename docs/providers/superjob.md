@@ -10,7 +10,7 @@ Implemented in 0.3.0 as an opt-in source of the `ru-market` provider. Disabled b
 
 ## Transport and access
 
-- JSON API `https://api.superjob.ru/2.0/vacancies/` through `ctx.fetchJson`, adapter `lib/superjob.mjs`. `mode` accepts `api` and `auto`.
+- JSON API `https://api.superjob.ru/2.0/vacancies/` through `ctx.fetchJson`, adapter `lib/providers/superjob.mjs`. `mode` accepts `api` and `auto`.
 - Authorization: `SUPERJOB_API_KEY` (the application's Secret key, not a user OAuth2 token) must be set in the career-ops `.env`. The plugin sends it only to `api.superjob.ru` as the `X-Api-App-Id` header; without it the request fails with a `config` error. The variable is listed in `optionalEnv` in `manifest.json`.
 - Host `api.superjob.ru` is declared in `manifest.json`; `lib/transport/http.mjs` allows only `/2.0/vacancies/`.
 

@@ -10,7 +10,7 @@ Implemented since 0.1.0 as a source of the `ru-market` provider. Enabled by defa
 
 ## Transport and access
 
-- Public HTML listing `https://geekjob.ru/vacancies/` (page `N` as `/vacancies/N`), parsed in `lib/geekjob.mjs`. No login, cookies or application submission.
+- Public HTML listing `https://geekjob.ru/vacancies/` (page `N` as `/vacancies/N`), parsed in `lib/providers/geekjob.mjs`. No login, cookies or application submission.
 - `mode` accepts `html` and `auto`; both use the same HTML route.
 - Authorization: none.
 - Host `geekjob.ru` is declared in `manifest.json`; `lib/transport/http.mjs` allows only `/vacancies/` with an optional numeric page.

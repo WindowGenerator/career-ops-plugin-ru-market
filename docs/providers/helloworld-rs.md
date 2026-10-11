@@ -1,7 +1,7 @@
 # HelloWorld.rs
 
 Status: Implemented
-Date: 2026-10-10
+Date: 2026-10-11
 Type: guide
 
 ## Status
@@ -10,7 +10,7 @@ Implemented in 0.6.0 as an optional Serbian IT job-board source in the existing 
 
 ## Transport and access
 
-- Public HTML listing `https://www.helloworld.rs/oglasi-za-posao`, adapter `lib/helloworld.mjs`. `html` and `auto` both use public HTML listings.
+- Public HTML listing `https://www.helloworld.rs/oglasi-za-posao`, adapter `lib/providers/helloworld.mjs`. `html` and `auto` both use public HTML listings.
 - Authorization: none.
 - The host `www.helloworld.rs` is declared in the manifest; the HTTP allowlist permits only HTTPS listing routes, not detail pages. No account access, browser fallback or CAPTCHA bypass is implemented.
 - Public HTML access does not establish permission to download or reuse content: the observed footer prohibits downloading without permission, older indexed terms restrict automation, and the complete current terms could not be verified (see the [research](../research/helloworld.md)).

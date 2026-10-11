@@ -1,10 +1,10 @@
 import { parseConfig } from './lib/config.mjs';
-import { fetchHabr } from './lib/habr-career.mjs';
-import { fetchGeekjob } from './lib/geekjob.mjs';
-import { fetchSuperjob } from './lib/superjob.mjs';
-import { fetchHelloWorld } from './lib/helloworld.mjs';
-import { fetchGetmatch } from './lib/getmatch.mjs';
-import { fetchTrudvsem } from './lib/trudvsem.mjs';
+import { fetchHabr } from './lib/providers/habr-career.mjs';
+import { fetchGeekjob } from './lib/providers/geekjob.mjs';
+import { fetchSuperjob } from './lib/providers/superjob.mjs';
+import { fetchHelloWorld } from './lib/providers/helloworld.mjs';
+import { fetchGetmatch } from './lib/providers/getmatch.mjs';
+import { fetchTrudvsem } from './lib/providers/trudvsem.mjs';
 import { deduplicate } from './lib/processors/dedup.mjs';
 import { categoryOf, SourceError } from './lib/errors.mjs';
 

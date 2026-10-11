@@ -1,10 +1,10 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import plugin, { adapters } from '../index.mjs';
-import { parseHabr } from '../lib/habr-career.mjs';
-import { parseGeekjob } from '../lib/geekjob.mjs';
-import { parseSuperjob } from '../lib/superjob.mjs';
-import { parseTrudvsem } from '../lib/trudvsem.mjs';
+import { parseHabr } from '../lib/providers/habr-career.mjs';
+import { parseGeekjob } from '../lib/providers/geekjob.mjs';
+import { parseSuperjob } from '../lib/providers/superjob.mjs';
+import { parseTrudvsem } from '../lib/providers/trudvsem.mjs';
 import { parseConfig, DEFAULT_SOURCES, SOURCES } from '../lib/config.mjs';
 import { parseDate, parseSalary, jobUrl, normalizedCompany, structuredSalary } from '../lib/processors/normalize.mjs';
 import { deduplicate } from '../lib/processors/dedup.mjs';

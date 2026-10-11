@@ -10,7 +10,7 @@ Implemented since 0.1.0 as a source of the `ru-market` provider. Enabled by defa
 
 ## Transport and access
 
-- Public HTML listing `https://career.habr.com/vacancies[/<category>][/remote]`, parsed in `lib/habr-career.mjs`. No login, cookies or application submission.
+- Public HTML listing `https://career.habr.com/vacancies[/<category>][/remote]`, parsed in `lib/providers/habr-career.mjs`. No login, cookies or application submission.
 - `mode` accepts `html` and `auto`; both use the same HTML route.
 - Authorization: none.
 - Host `career.habr.com` is declared in `manifest.json`; `lib/transport/http.mjs` allows only `/vacancies`, an optional category and `/remote`.

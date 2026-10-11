@@ -3,7 +3,7 @@ const tests = [];
 const test = (name, run) => tests.push({ name, run });
 import { readFileSync } from 'node:fs';
 import plugin, { adapters } from '../index.mjs';
-import { parseGetmatch } from '../lib/getmatch.mjs';
+import { parseGetmatch } from '../lib/providers/getmatch.mjs';
 import { parseConfig, SOURCES, DEFAULT_SOURCES } from '../lib/config.mjs';
 import { jobUrl } from '../lib/processors/normalize.mjs';
 import { deduplicate, localDedup, confidence } from '../lib/processors/dedup.mjs';

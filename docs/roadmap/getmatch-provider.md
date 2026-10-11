@@ -39,7 +39,7 @@ Result of this stage: a minimal response contract and a confirmed pagination for
 
 ### 3. Adapter and normalization
 
-In `lib/getmatch.mjs` implement a pure `parseGetmatch(data)` and `fetchGetmatch(cfg, ctx, options)`.
+In `lib/providers/getmatch.mjs` implement a pure `parseGetmatch(data)` and `fetchGetmatch(cfg, ctx, options)`.
 
 - Validate the response object, the `offers` array and the numeric `meta` fields. A wrong schema is `SourceError('broken-markup', ...)`, not an empty result.
 - Accept only `offer_type === 'vacancy'` and `is_active === true`. Exclude special announcements; do not turn unknown types into ordinary vacancies. Distinguish a schema mismatch of ordinary vacancies from a correct page with special announcements.

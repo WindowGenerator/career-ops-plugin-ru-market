@@ -10,7 +10,7 @@ Implemented in 0.3.0 as an opt-in source of the `ru-market` provider (the portal
 
 ## Transport and access
 
-- Public JSON API `https://opendata.trudvsem.ru/api/v1/vacancies` through `ctx.fetchJson`, adapter `lib/trudvsem.mjs`. `mode` accepts `api` and `auto`.
+- Public JSON API `https://opendata.trudvsem.ru/api/v1/vacancies` through `ctx.fetchJson`, adapter `lib/providers/trudvsem.mjs`. `mode` accepts `api` and `auto`.
 - Authorization: none.
 - Host `opendata.trudvsem.ru` is declared in `manifest.json`; `lib/transport/http.mjs` allows only `/api/v1/vacancies`.
 

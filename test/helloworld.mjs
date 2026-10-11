@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import plugin from '../index.mjs';
-import { parseHelloWorld, parseHelloWorldSalary, fetchHelloWorld } from '../lib/helloworld.mjs';
+import { parseHelloWorld, parseHelloWorldSalary, fetchHelloWorld } from '../lib/providers/helloworld.mjs';
 import { parseConfig, SOURCES, DEFAULT_SOURCES } from '../lib/config.mjs';
 import { assertRequestUrl } from '../lib/transport/http.mjs';
 import { jobUrl } from '../lib/processors/normalize.mjs';
