@@ -105,4 +105,4 @@ Architecture (`architecture/<topic>.md`, Type: architecture): one or more diagra
 
 ### Checker
 
-`node test/docs.mjs` scans all `*.md` files outside `node_modules`, `.git` and `reports`. It fails on broken relative links and images, on Cyrillic outside code spans, fenced blocks and blockquote lines (in `docs/`, root `*.md`, `companion/README.md`, `examples/*.md`), and on files under `docs/` outside the four categories. It only warns about a missing `Status:` or `Date:` header.
+`node test/docs.mjs` scans all `*.md` files outside `node_modules` and `.git`. It fails on broken relative links and images, on Cyrillic outside code spans, fenced blocks and blockquote lines (in `docs/`, root `*.md`, `companion/README.md`, `examples/*.md`), and on files under `docs/` outside the four categories. It only warns about a missing `Status:` or `Date:` header.

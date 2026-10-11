@@ -86,4 +86,4 @@ Artifacts (without `--no-artifacts`): `query-XX.json`, `merged.json`, `queries-s
 
 - Tests: `npm test` (offline), `npm run test:integration` (`test/integration.sh`, `test/browser.sh`, `test/companion-install.sh`; they need `CAREER_OPS_ROOT` set to a stock career-ops checkout), `npm run test:dom` (real DOM fixtures in `fixtures/hh-browser`, copy of stock core).
 - Health check (from career-ops): `node scripts/ru-market/scan-hh.mjs --preflight --channel chrome`; tool version: `--version`.
-- Live smoke on 2026-10-07 (companion tool 0.5.0, before the 0.7.0 changes; not repeated for 0.8.0, unverified): two pages, 40 unique vacancies, 11 compensation fields, no access challenge; see [reports/hh-live-smoke-2026-10-07.json](../../reports/hh-live-smoke-2026-10-07.json).
+- Live smoke on 2026-10-07 (companion tool 0.5.0, before the 0.7.0 changes; not repeated for 0.8.0, unverified): two pages, 40 unique vacancies, 11 compensation fields, no access challenge. The raw result file was removed from the repository.

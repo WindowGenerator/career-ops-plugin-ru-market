@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SKIP_DIRS = new Set(['node_modules', '.git', 'reports']);
+const SKIP_DIRS = new Set(['node_modules', '.git']);
 const DOC_CATEGORIES = ['providers', 'architecture', 'research', 'roadmap'];
 const CYRILLIC = /[Ѐ-ӿ]/;
 
