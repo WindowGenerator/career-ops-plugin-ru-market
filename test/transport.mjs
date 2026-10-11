@@ -30,6 +30,7 @@ test('assertRequestUrl: other paths, hosts, schemes, ports and credentials are a
     'https://getmatch.ru/api/offers/1',
     'https://opendata.trudvsem.ru/api/v1/vacancies/x',
     'https://example.com/vacancies',
+    'https://constructor/vacancies',
     'http://career.habr.com/vacancies',
     'https://career.habr.com:8443/vacancies',
     'https://user:pass@career.habr.com/vacancies',
@@ -39,31 +40,45 @@ test('assertRequestUrl: other paths, hosts, schemes, ports and credentials are a
 
 test('request: sends the plugin User-Agent with a text Accept header through ctx.fetchText', async () => {
   const calls = [];
-  const ctx = { fetchText: async (url, init) => { calls.push({ kind: 'text', url, init }); return '<html></html>'; } };
+  const ctx = {
+    fetchText: async (url, init) => {
+      calls.push({ url, init });
+      return '<html></html>';
+    },
+  };
   const body = await request(ctx, 'https://career.habr.com/vacancies', 'text', { retries: 0 });
   assert.strictEqual(body, '<html></html>');
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(calls[0].url, 'https://career.habr.com/vacancies');
-  assert.deepStrictEqual(calls[0].init, { headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' }, timeoutMs: 10_000 });
+  const headers = { 'User-Agent': USER_AGENT, Accept: 'text/html' };
+  assert.deepStrictEqual(calls[0].init, { headers, timeoutMs: 10_000 });
 });
 
 test('request: json kind uses ctx.fetchJson and an application/json Accept header', async () => {
   const calls = [];
   const ctx = { fetchJson: async (url, init) => { calls.push(init); return { ok: true }; } };
-  assert.deepStrictEqual(await request(ctx, 'https://getmatch.ru/api/offers?limit=1', 'json', { retries: 0 }), { ok: true });
+  const url = 'https://getmatch.ru/api/offers?limit=1';
+  assert.deepStrictEqual(await request(ctx, url, 'json', { retries: 0 }), { ok: true });
   assert.strictEqual(calls[0].headers.Accept, 'application/json');
   assert.strictEqual('X-Api-App-Id' in calls[0].headers, false);
 });
 
 test('request: SuperJob requires a printable-ASCII API key and sends it as X-Api-App-Id', async () => {
-  for (const env of [undefined, {}, { SUPERJOB_API_KEY: '' }, { SUPERJOB_API_KEY: 'has space' }, { SUPERJOB_API_KEY: 5 }]) {
+  const badEnvs = [undefined, {}, { SUPERJOB_API_KEY: '' }, { SUPERJOB_API_KEY: 'has space' }, { SUPERJOB_API_KEY: 5 }];
+  for (const env of badEnvs) {
     await assert.rejects(
       request({ env, fetchJson: async () => ({}) }, 'https://api.superjob.ru/2.0/vacancies/', 'json'),
       e => e.category === 'config',
     );
   }
   const seen = [];
-  const ctx = { env: { SUPERJOB_API_KEY: 'v3.r.key' }, fetchJson: async (url, init) => { seen.push(init.headers); return {}; } };
+  const ctx = {
+    env: { SUPERJOB_API_KEY: 'v3.r.key' },
+    fetchJson: async (url, init) => {
+      seen.push(init.headers);
+      return {};
+    },
+  };
   await request(ctx, 'https://api.superjob.ru/2.0/vacancies/', 'json', { retries: 0 });
   assert.strictEqual(seen[0]['X-Api-App-Id'], 'v3.r.key');
 });
@@ -79,7 +94,8 @@ test('request: retries=0 passes the first failure through unchanged', async () =
   let calls = 0;
   const error = Object.assign(new Error('HTTP 503'), { status: 503 });
   const ctx = { fetchJson: async () => { calls++; throw error; } };
-  await assert.rejects(request(ctx, 'https://opendata.trudvsem.ru/api/v1/vacancies', 'json', { retries: 0 }), e => e === error);
+  const url = 'https://opendata.trudvsem.ru/api/v1/vacancies';
+  await assert.rejects(request(ctx, url, 'json', { retries: 0 }), e => e === error);
   assert.strictEqual(calls, 1);
 });
 
@@ -104,7 +120,10 @@ test('withRetry: backoff doubles, is capped at 5 seconds and honours a longer Re
   let calls = 0;
   const error = Object.assign(new Error('HTTP 503'), { status: 503, retryAfter: 4 });
   await assert.rejects(
-    withRetry(async () => { calls++; throw error; }, { retries: 3, wait: async ms => delays.push(ms), random: () => 0 }),
+    withRetry(
+      async () => { calls++; throw error; },
+      { retries: 3, wait: async ms => delays.push(ms), random: () => 0 },
+    ),
     e => e === error,
   );
   assert.strictEqual(calls, 4);
@@ -117,8 +136,8 @@ test('withRetry: backoff doubles, is capped at 5 seconds and honours a longer Re
 
 test('withRetry: non-retryable categories are thrown immediately', async () => {
   let calls = 0;
-  await assert.rejects(withRetry(async () => { calls++; throw Object.assign(new Error('HTTP 404'), { status: 404 }); },
-    { wait: async () => {} }));
+  const notFound = Object.assign(new Error('HTTP 404'), { status: 404 });
+  await assert.rejects(withRetry(async () => { calls++; throw notFound; }, { wait: async () => {} }));
   assert.strictEqual(calls, 1);
 });
 
@@ -140,7 +159,11 @@ test('createQueue: resolves with the task value and rejects with the task error'
 });
 
 test('enqueue: every allowlisted host has a queue and unknown hosts are refused', async () => {
-  for (const host of ['career.habr.com', 'geekjob.ru', 'api.superjob.ru', 'opendata.trudvsem.ru', 'www.helloworld.rs', 'getmatch.ru']) {
+  const hosts = [
+    'career.habr.com', 'geekjob.ru', 'api.superjob.ru',
+    'opendata.trudvsem.ru', 'www.helloworld.rs', 'getmatch.ru',
+  ];
+  for (const host of hosts) {
     assert.strictEqual(await enqueue(host, async () => host), host);
   }
   assert.throws(() => enqueue('example.com', async () => {}), /Unsupported request host: example\.com/);

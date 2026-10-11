@@ -27,7 +27,8 @@ test('passes the raw response and the context to extract and values', () => {
 });
 
 test('empty items are a valid empty page', () => {
-  assert.deepStrictEqual(parsePage(adapter(() => ({ items: [], hasNext: false })), 'raw'), { jobs: [], hasNext: false });
+  const page = parsePage(adapter(() => ({ items: [], hasNext: false })), 'raw');
+  assert.deepStrictEqual(page, { jobs: [], hasNext: false });
 });
 
 test('access and shape errors thrown by extract propagate unchanged', () => {
@@ -37,7 +38,12 @@ test('access and shape errors thrown by extract propagate unchanged', () => {
 
 test('null items and items rejected by makeJob are dropped', () => {
   const page = parsePage(adapter(() => ({
-    items: [null, values(1), { title: '', url: 'https://career.habr.com/vacancies/9' }, values(2, { url: 'https://evil.example/x' })],
+    items: [
+      null,
+      values(1),
+      { title: '', url: 'https://career.habr.com/vacancies/9' },
+      values(2, { url: 'https://evil.example/x' }),
+    ],
     hasNext: false,
   })), 'raw');
   assert.deepStrictEqual(page.jobs.map(job => job.sourceId), ['1']);

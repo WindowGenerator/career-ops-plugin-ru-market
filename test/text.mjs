@@ -31,7 +31,8 @@ test('decode: nbsp entity becomes an ordinary space', () => {
 });
 
 test('plainText: strips tags, script and style, decodes entities, collapses space', () => {
-  assert.strictEqual(plainText('<p>Hello&nbsp;<b>world</b></p><script>alert(1)</script><style>p{}</style>!'), 'Hello world !');
+  const html = '<p>Hello&nbsp;<b>world</b></p><script>alert(1)</script><style>p{}</style>!';
+  assert.strictEqual(plainText(html), 'Hello world !');
   assert.strictEqual(plainText(undefined), '');
   assert.strictEqual(plainText('a &lt;b&gt; c'), 'a <b> c');
 });

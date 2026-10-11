@@ -19,7 +19,8 @@ const job = (source, id, extra = {}) => ({
 // --- salary parsing -------------------------------------------------------
 
 test('structuredSalary: accepts min/max or from/to aliases and maps RUR to RUB', () => {
-  assert.deepStrictEqual(structuredSalary({ from: 10, to: 20, currency: 'RUR' }), { currency: 'RUB', min: 10, max: 20 });
+  const converted = structuredSalary({ from: 10, to: 20, currency: 'RUR' });
+  assert.deepStrictEqual(converted, { currency: 'RUB', min: 10, max: 20 });
   assert.deepStrictEqual(structuredSalary({ min: 5, currency: 'USD' }), { currency: 'USD', min: 5 });
   assert.deepStrictEqual(structuredSalary({ to: 7, currency: 'EUR' }), { currency: 'EUR', max: 7 });
 });
@@ -75,7 +76,7 @@ test('normalizeCompensation: maps RUR to RUB and keeps valid amounts', () => {
   );
 });
 
-test('normalizeCompensation: invalid amounts, inverted ranges or missing currency produce a diagnostic and no amounts', () => {
+test('normalizeCompensation: invalid amounts, inverted ranges or no currency give a diagnostic', () => {
   const diagnostic = 'invalid-amount-or-currency';
   assert.strictEqual(normalizeCompensation({ currency: 'RUB', min: 9, max: 3 }).diagnostic, diagnostic);
   assert.strictEqual(normalizeCompensation({ min: 1 }).diagnostic, diagnostic);
@@ -91,7 +92,8 @@ test('normalizeCompensation: an explicit string diagnostic overrides the compute
 
 test('parseCompensation: amounts, period, tax basis and open bounds', () => {
   assert.deepStrictEqual(parseCompensation('от 100 000 ₽ в месяц на руки'), {
-    rawText: 'от 100 000 ₽ в месяц на руки', period: 'month', taxBasis: 'net', currency: 'RUB', min: 100000,
+    rawText: 'от 100 000 ₽ в месяц на руки',
+    period: 'month', taxBasis: 'net', currency: 'RUB', min: 100000,
   });
   assert.deepStrictEqual(parseCompensation('до 5 000 $ per year gross'), {
     rawText: 'до 5 000 $ per year gross', period: 'year', taxBasis: 'gross', currency: 'USD', max: 5000,
@@ -118,7 +120,8 @@ test('parseCompensation: empty is undefined, a currency hint is used and RUR bec
 });
 
 test('parseCompensation: ambiguous or unsupported text keeps rawText with a diagnostic', () => {
-  assert.strictEqual(parseCompensation('по договорённости').diagnostic, 'ambiguous-amount-or-currency');
+  const ambiguous = parseCompensation('по договорённости');
+  assert.strictEqual(ambiguous.diagnostic, 'ambiguous-amount-or-currency');
   assert.strictEqual(parseCompensation('100 000 ₽ прогноз').diagnostic, 'ambiguous-amount-or-currency');
   assert.strictEqual(parseCompensation('100 000 ₽ в неделю').diagnostic, 'unsupported-period');
   assert.strictEqual('min' in parseCompensation('по договорённости'), false);
@@ -196,7 +199,9 @@ test('sourceOf: reads the source id from the note, empty when absent', () => {
 
 test('localDedup: same posting is merged, matchedQueries are unioned by queryId, input is not mutated', () => {
   const a = job('habr-career', '1', { matchedQueries: [{ query: 'a', queryId: 'q1' }] });
-  const b = job('habr-career', '1', { matchedQueries: [{ query: 'a', queryId: 'q1' }, { query: 'b', queryId: 'q2' }] });
+  const b = job('habr-career', '1', {
+    matchedQueries: [{ query: 'a', queryId: 'q1' }, { query: 'b', queryId: 'q2' }],
+  });
   const result = localDedup([a, b, job('habr-career', '2')]);
   assert.strictEqual(result.length, 2);
   assert.deepStrictEqual(result[0].matchedQueries.map(q => q.queryId), ['q1', 'q2']);
@@ -237,12 +242,13 @@ test('confidence: cross-source needs same company (legal form ignored), title, l
   assert.strictEqual(confidence({ ...a, postedAt: DAY }, job('geekjob', '1', { postedAt: 16 * DAY })), 'low');
   assert.strictEqual(confidence({ ...a, postedAt: DAY }, job('geekjob', '1', { postedAt: 15 * DAY })), 'medium');
   const usd = { currency: 'USD', min: 1 };
-  assert.strictEqual(confidence({ ...a, salary: usd }, job('geekjob', '1', { salary: { currency: 'RUB', min: 1 } })), 'low');
+  const rubles = job('geekjob', '1', { salary: { currency: 'RUB', min: 1 } });
+  assert.strictEqual(confidence({ ...a, salary: usd }, rubles), 'low');
   assert.strictEqual(confidence({ ...a, salary: { currency: 'RUB', min: 1, max: 5 } },
     job('geekjob', '1', { salary: { currency: 'RUB', min: 9 } })), 'low');
 });
 
-test('confidence: descriptions with 12+ distinct words are compared, similar ones become high with a location', () => {
+test('confidence: descriptions of 12+ distinct words are compared; similar ones with a location are high', () => {
   const text = words(20);
   const a = job('habr-career', '1', { description: text });
   assert.strictEqual(confidence(a, job('geekjob', '1', { description: text })), 'high');
@@ -290,7 +296,8 @@ test('deduplicate: does not mutate its input jobs', () => {
 test('legacy: label() has no entry for helloworld-rs so notes show the raw source id', () => {
   const result = deduplicate([job('habr-career', '1'), job('helloworld-rs', '5')], ['habr-career', 'helloworld-rs']);
   assert.match(result[0].note, /cross-listed: helloworld-rs https:\/\/example\.test\/helloworld-rs\/5$/);
-  assert.match(deduplicate([job('habr-career', '1'), job('trudvsem', '5')], ['habr-career', 'trudvsem'])[0].note, /cross-listed: Работа России /);
+  const merged = deduplicate([job('habr-career', '1'), job('trudvsem', '5')], ['habr-career', 'trudvsem']);
+  assert.match(merged[0].note, /cross-listed: Работа России /);
 });
 
 test('legacy: salary notes are merged by splitting the donor note on "; salary: "', () => {

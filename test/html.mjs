@@ -24,7 +24,8 @@ test('parseHtml: decodes entities in text and attribute values', () => {
 test('parseHtml: void and self-closing tags do not swallow following siblings', () => {
   const root = parseHtml('<p>a<br>b<img src="x"><span/>c</p>');
   const p = first(root, 'p');
-  assert.deepStrictEqual(p.children.map(c => typeof c === 'string' ? c : c.tag), ['a', 'br', 'b', 'img', 'span', 'c']);
+  const shape = p.children.map(c => (typeof c === 'string' ? c : c.tag));
+  assert.deepStrictEqual(shape, ['a', 'br', 'b', 'img', 'span', 'c']);
 });
 
 test('parseHtml: unclosed tags are tolerated and closed by the nearest matching end tag', () => {
@@ -41,7 +42,9 @@ test('parseHtml: a stray end tag is ignored', () => {
 });
 
 test('parseHtml: comments, script and style payloads are dropped', () => {
-  const root = parseHtml('<p>a<!-- hidden <b>x</b> -->b<script>var x = "<p>evil</p>";</script><style>p{}</style>c</p>');
+  const root = parseHtml(
+    '<p>a<!-- hidden <b>x</b> -->b<script>var x = "<p>evil</p>";</script><style>p{}</style>c</p>',
+  );
   assert.strictEqual(all(root, n => ['script', 'style', 'b'].includes(n.tag)).length, 0);
 });
 
@@ -110,7 +113,8 @@ test('hasNext: habr style page parameter', () => {
   assert.strictEqual(hasNext(parseHtml('<a href="/vacancies?page=2">2</a>'), url), true);
   assert.strictEqual(hasNext(parseHtml('<a href="/vacancies?page=1">1</a>'), url), false);
   assert.strictEqual(hasNext(parseHtml('<a href="?page=3">3</a>'), 'https://career.habr.com/vacancies?page=2'), true);
-  assert.strictEqual(hasNext(parseHtml('<a href="/vacancies?page=2">2</a>'), 'https://career.habr.com/vacancies'), true);
+  const link = parseHtml('<a href="/vacancies?page=2">2</a>');
+  assert.strictEqual(hasNext(link, 'https://career.habr.com/vacancies'), true);
 });
 
 test('hasNext: links to another origin or another path do not count', () => {
