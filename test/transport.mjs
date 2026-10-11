@@ -1,7 +1,7 @@
 import assert from 'node:assert';
-import { assertRequestUrl, request, USER_AGENT } from '../lib/http.mjs';
-import { createQueue, enqueue } from '../lib/queue.mjs';
-import { retryAfterMs, withRetry } from '../lib/retry.mjs';
+import { assertRequestUrl, request, USER_AGENT } from '../lib/transport/http.mjs';
+import { createQueue, enqueue } from '../lib/transport/queue.mjs';
+import { retryAfterMs, withRetry } from '../lib/transport/retry.mjs';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });

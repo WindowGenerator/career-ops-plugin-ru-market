@@ -8,9 +8,9 @@ import { parseTrudvsem } from '../lib/trudvsem.mjs';
 import { parseConfig, DEFAULT_SOURCES, SOURCES } from '../lib/config.mjs';
 import { parseDate, parseSalary, jobUrl, normalizedCompany, structuredSalary } from '../lib/normalize.mjs';
 import { deduplicate } from '../lib/dedup.mjs';
-import { withRetry, retryAfterMs } from '../lib/retry.mjs';
-import { createQueue, enqueue } from '../lib/queue.mjs';
-import { assertRequestUrl } from '../lib/http.mjs';
+import { withRetry, retryAfterMs } from '../lib/transport/retry.mjs';
+import { createQueue, enqueue } from '../lib/transport/queue.mjs';
+import { assertRequestUrl } from '../lib/transport/http.mjs';
 import { checkHealth } from '../scripts/health.mjs';
 
 const tests = [];

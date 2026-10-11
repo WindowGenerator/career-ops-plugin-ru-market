@@ -7,7 +7,7 @@ import { parseGetmatch } from '../lib/getmatch.mjs';
 import { parseConfig, SOURCES, DEFAULT_SOURCES } from '../lib/config.mjs';
 import { jobUrl } from '../lib/normalize.mjs';
 import { deduplicate, localDedup, confidence } from '../lib/dedup.mjs';
-import { assertRequestUrl } from '../lib/http.mjs';
+import { assertRequestUrl } from '../lib/transport/http.mjs';
 import { paginate } from '../lib/paginate.mjs';
 import { checkHealth } from '../scripts/health.mjs';
 const fixture = () => JSON.parse(readFileSync(new URL('../fixtures/getmatch/normal.json', import.meta.url)));
