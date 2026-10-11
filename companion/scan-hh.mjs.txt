@@ -9,18 +9,64 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { isMainModule } from '../../lib/is-main-module.mjs';
 import { getCareerOpsRoot } from '../../path-resolver.mjs';
-import { parseCompensation } from '../../providers/_compensation.mjs';
 import { untrusted } from './lib/untrusted.mjs';
-export const TOOL_VERSION = '0.7.0';
-export const CONTRACT_VERSION = 2;
+export const TOOL_VERSION = '0.8.0';
+export const CONTRACT_VERSION = 3;
 const clean = s => typeof s === 'string' ? s.replace(/\s+/gu, ' ').trim() : '';
 const diagnostic = (category, message, extra = {}) => Object.assign(new Error(message), { category, ...extra });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const abortInfo = signal => signal?.reason === 'deadline'
   ? { category: 'timeout', message: 'Collection deadline reached (timeout_ms); partial results returned' }
   : { category: 'interrupted', message: 'Collection interrupted; resume from checkpoint' };
-const salaryFrom = c => c?.currency && (c.min !== undefined || c.max !== undefined)
-  ? { ...(c.min !== undefined ? { min: c.min } : {}), ...(c.max !== undefined ? { max: c.max } : {}), currency: c.currency } : undefined;
+// Same parser as lib/compensation.mjs, kept inline because the companion is installed without plugin modules; a test checks parity.
+const tidy = value => typeof value === 'string' ? value.replace(/\s+/gu, ' ').trim() : '';
+function normalizeCompensation(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const out = {
+    period: ['month', 'year', 'hour', 'shift'].includes(value.period) ? value.period : 'unknown',
+    taxBasis: ['gross', 'net'].includes(value.taxBasis) ? value.taxBasis : 'unknown',
+    rawText: tidy(value.rawText),
+  };
+  if (typeof value.currency === 'string' && /^[A-Z]{3}$/.test(value.currency)) out.currency = value.currency === 'RUR' ? 'RUB' : value.currency;
+  const supplied = ['min', 'max'].filter(k => value[k] !== undefined);
+  const valid = supplied.length && supplied.every(k => typeof value[k] === 'number' && Number.isFinite(value[k]) && value[k] >= 0)
+    && !(value.min !== undefined && value.max !== undefined && value.min > value.max);
+  if (valid && out.currency) for (const key of supplied) out[key] = value[key];
+  else if (supplied.length) out.diagnostic = 'invalid-amount-or-currency';
+  if (typeof value.diagnostic === 'string') out.diagnostic = value.diagnostic;
+  return out;
+}
+export function parseCompensation(rawText, currencyHint) {
+  const raw = tidy(rawText);
+  if (!raw) return undefined;
+  const period = /(?:в|за) (?:месяц)|per month|\/month/i.test(raw) ? 'month'
+    : /(?:в|за) год|per year|annual|\/year/i.test(raw) ? 'year'
+    : /(?:в|за) час|per hour|\/hour/i.test(raw) ? 'hour'
+    : /(?:за|в) смену|per shift/i.test(raw) ? 'shift' : 'unknown';
+  const gross = /до вычета налогов|gross/i.test(raw), net = /на руки|net/i.test(raw);
+  const taxBasis = gross && !net ? 'gross' : net && !gross ? 'net' : 'unknown';
+  const detected = /₽|руб|\bRU[BR]\b/i.test(raw) ? 'RUB' : /\$|\bUSD\b/.test(raw) ? 'USD'
+    : /€|\bEUR\b/.test(raw) ? 'EUR' : /₸|\bKZT\b/.test(raw) ? 'KZT' : /\bBYN\b/.test(raw) ? 'BYN' : undefined;
+  const currency = currencyHint === 'RUR' ? 'RUB' : currencyHint || detected;
+  const result = { rawText: raw, period, taxBasis, ...(currency ? { currency } : {}) };
+  // Only the leading amount expression determines a bound; tax prose cannot.
+  const amount = '(\\d+(?: \\d{3})*(?:[.,]\\d+)?)(?:\\s*(тыс\\.?|[kк]))?';
+  const pattern = new RegExp(`^(?:(от|до|from|up to)\\s+)?${amount}(?:\\s*[–—-]\\s*${amount})?\\s*(₽|руб\\.?|RUB|RUR|USD|EUR|KZT|BYN|UZS|GEL|AMD|\\$|€|₸)(?=\\s|$|[,;])`, 'i');
+  const match = pattern.exec(raw);
+  if (!match || !currency || (detected && detected !== currency) || /не указ|договор|прогноз|похож|estimate|predicted/i.test(raw)) {
+    return normalizeCompensation({ ...result, diagnostic: 'ambiguous-amount-or-currency' });
+  }
+  if (period === 'unknown' && /недел|сутк|день|week|day/i.test(raw)) return normalizeCompensation({ ...result, diagnostic: 'unsupported-period' });
+  const number = (n, suffix) => Number(n.replace(/ /g, '').replace(',', '.')) * (suffix ? 1000 : 1);
+  const first = number(match[2], match[3]), second = match[4] ? number(match[4], match[5]) : undefined;
+  const bounds = second !== undefined ? { min: first, max: second }
+    : /^(до|up to)$/i.test(match[1] ?? '') ? { max: first }
+    : /^(от|from)$/i.test(match[1] ?? '') ? { min: first } : { min: first, max: first };
+  return normalizeCompensation({ ...result, ...bounds });
+}
+// `salary` is the midpoint of a complete RUB monthly range; everything else stays only in `compensation`.
+const salaryFrom = c => c?.currency === 'RUB' && c.period === 'month' && c.min !== undefined && c.max !== undefined
+  ? { min: (c.min + c.max) / 2, max: (c.min + c.max) / 2, currency: 'RUB' } : undefined;
 // Same normalisation and flags as the plugin's makeJob; flagged jobs are kept.
 export function sanitizeJob(job) {
   const flags = new Set(Array.isArray(job.injectionFlags) ? job.injectionFlags.filter(f => typeof f === 'string' && /^[a-z][a-z0-9-]{0,39}$/.test(f)) : []);
@@ -130,15 +176,17 @@ function classify(error) {
     message: clean(error.category ? error.message : `${error.name || 'Error'} while collecting HH listings`).slice(0, 240),
     ...(Number.isInteger(error.http_status) ? { http_status: error.http_status } : {}) };
 }
-const statusBase = options => ({ source: 'hh', transport: 'playwright', query: options.query, queryId: options.queryId ?? queryId(clean(options.query)), completed_pages: 0, count: 0 });
-const envelope = (jobs, statuses, extra = {}) => ({ contractVersion: CONTRACT_VERSION, toolVersion: TOOL_VERSION, jobs, sourceStatuses: statuses, ...extra });
+// Per-query collection state lives only in checkpoint.json, query-XX.json, queries-summary.json and stderr; it is not part of the stdout envelope.
+const stateBase = options => ({ source: 'hh', transport: 'playwright', query: options.query, queryId: options.queryId ?? queryId(clean(options.query)), completed_pages: 0, count: 0 });
+const envelope = (jobs, extra = {}) => ({ contractVersion: CONTRACT_VERSION, toolVersion: TOOL_VERSION, jobs, ...extra });
+const report = state => { if (state.status !== 'ok') console.error(`HH ${state.queryId}: ${state.status} (${state.category}) after ${state.completed_pages} page(s): ${state.message}`); };
 
 export async function searchHh(input) {
   const options = { pages: 1, channel: 'chrome', titleOnly: false, headed: false, retries: 0, ...input };
-  const status = statusBase(options);
+  const state = stateBase(options);
   let browser, context, page, ownBrowser = false;
   let jobs = input.initial?.jobs ?? [], start = input.initial?.completed_pages ?? 0;
-  status.completed_pages = start;
+  state.completed_pages = start;
   try {
     validateOptions(options);
     browser = input.browser ?? await preflight(options); ownBrowser = !input.browser;
@@ -170,7 +218,7 @@ export async function searchHh(input) {
           }
           const body = await page.locator('body').innerText();
           if (/captcha|access denied|проверка.*человек|подтвердите.*человек/i.test(body)) throw diagnostic('access', 'HH access challenge; collection stopped');
-          found = await extractHhJobs(page, { query: options.query, queryId: status.queryId });
+          found = await extractHhJobs(page, { query: options.query, queryId: state.queryId });
           const explicitEmpty = /ничего не найдено|вакансий не найдено/i.test(body)
             || await page.locator('[data-qa="vacancy-serp__no-results"], [data-qa="vacancy-serp__empty"]').count() > 0;
           if (!found.length && !explicitEmpty) throw diagnostic('broken-markup', 'HH markup changed: no valid vacancy cards');
@@ -181,25 +229,26 @@ export async function searchHh(input) {
           await sleep(500 * (attempt + 1));
         }
       }
-      jobs = mergeJobs([...jobs, ...found]); status.completed_pages++; status.count = jobs.length;
-      status.status = 'ok'; status.stop_reason = hasNext ? 'page-limit' : found.length ? 'exhausted' : 'empty';
-      await input.onCheckpoint?.({ jobs, ...status });
-      console.error(`HH ${status.queryId} page ${index + 1}: ${found.length} vacancies`);
+      jobs = mergeJobs([...jobs, ...found]); state.completed_pages++; state.count = jobs.length;
+      state.status = 'ok'; state.stop_reason = hasNext ? 'page-limit' : found.length ? 'exhausted' : 'empty';
+      await input.onCheckpoint?.({ jobs, ...state });
+      console.error(`HH ${state.queryId} page ${index + 1}: ${found.length} vacancies`);
       if (!hasNext) break;
       if (index + 1 < options.pages) await (page.waitForTimeout?.(1000) ?? sleep(1000));
     }
-    status.status = 'ok'; status.stop_reason ??= 'page-limit';
+    state.status = 'ok'; state.stop_reason ??= 'page-limit';
   } catch (error) {
-    Object.assign(status, { status: status.completed_pages ? 'partial' : 'failed', failed_page: status.completed_pages + 1, ...classify(error) });
+    Object.assign(state, { status: state.completed_pages ? 'partial' : 'failed', failed_page: state.completed_pages + 1, ...classify(error) });
   } finally {
     await page?.close?.().catch(() => {});
     if (!input.context && context && context !== browser) await context.close().catch(() => {});
     if (ownBrowser) await browser?.close().catch(() => {});
   }
-  status.count = jobs.length;
+  state.count = jobs.length;
   const flagged = jobs.filter(job => job.injectionFlags?.length).length;
-  if (flagged) status.injection_flagged = flagged;
-  return envelope(jobs, [status]);
+  if (flagged) state.injection_flagged = flagged;
+  report(state);
+  return { jobs, state };
 }
 
 export async function loadBatchConfig(path, entryName, dataRoot = getCareerOpsRoot()) {
@@ -260,30 +309,31 @@ export async function collectBatch(input) {
     for (const [index, query] of options.queries.entries()) {
       const id = queryId(query, index), old = checkpoint.queries[id];
       let result;
-      if (old?.status === 'ok') result = envelope(old.jobs, [{ ...old, jobs: undefined }]);
+      if (old?.status === 'ok') result = { jobs: old.jobs, state: { ...old, jobs: undefined } };
       else if (blocked || options.signal?.aborted || launchFailure) {
         const stop = abortInfo(options.signal);
-        const state = { ...statusBase({ query, queryId: id }), completed_pages: old?.completed_pages ?? 0, count: old?.jobs?.length ?? 0, status: launchFailure && !results.length ? 'failed' : 'skipped', category: blocked ? 'access' : options.signal?.aborted ? stop.category : launchFailure.category,
+        const state = { ...stateBase({ query, queryId: id }), completed_pages: old?.completed_pages ?? 0, count: old?.jobs?.length ?? 0, status: launchFailure && !results.length ? 'failed' : 'skipped', category: blocked ? 'access' : options.signal?.aborted ? stop.category : launchFailure.category,
           message: blocked ? 'Skipped after HH access block' : options.signal?.aborted ? stop.message : launchFailure.message };
-        result = envelope(old?.jobs ?? [], [state]);
+        report(state);
+        result = { jobs: old?.jobs ?? [], state };
       } else {
         result = await searchHh({ ...options, query, queryId: id, browser, context, initial: old,
           onCheckpoint: state => { checkpoint.queries[id] = { ...state, status: state.completed_pages >= options.pages || state.stop_reason !== 'page-limit' ? 'ok' : 'running' }; save(); } });
       }
-      const status = result.sourceStatuses[0];
-      checkpoint.queries[id] = { ...status, jobs: result.jobs }; save();
-      atomicJson(resolve(folder, `query-${String(index + 1).padStart(2, '0')}.json`), result);
+      checkpoint.queries[id] = { ...result.state, jobs: result.jobs }; save();
+      atomicJson(resolve(folder, `query-${String(index + 1).padStart(2, '0')}.json`), envelope(result.jobs, { query: result.state }));
       results.push(result);
-      if (status.category === 'access') blocked = true;
+      if (result.state.category === 'access') blocked = true;
       if (index + 1 < options.queries.length && !blocked && browser) await (options.wait ?? sleep)(1000);
     }
   } finally {
     if (context && context !== browser) await context.close().catch(() => {});
     await browser?.close().catch(() => {});
   }
-  const result = envelope(mergeJobs(results.flatMap(r => r.jobs)), results.flatMap(r => r.sourceStatuses), { parameters, artifactDir: folder });
+  const result = envelope(mergeJobs(results.flatMap(r => r.jobs)), { parameters, artifactDir: folder });
+  const states = results.map(r => r.state);
   atomicJson(resolve(folder, 'merged.json'), result);
-  atomicJson(resolve(folder, 'queries-summary.json'), { ...result, jobs: undefined });
+  atomicJson(resolve(folder, 'queries-summary.json'), { ...result, jobs: undefined, count: result.jobs.length, queries: states });
   // Same executable imports the cache; no generated JavaScript adapters.
   const portals = { ...options.scannerConfig, tracked_companies: [], job_boards: [{ name: 'HH browser cache', provider: 'local-parser', careers_url: 'https://hh.ru/search/vacancy',
     parser: { command: 'node', script: 'scripts/ru-market/scan-hh.mjs', args: ['--import-cache', resolve(folder, 'merged.json')], timeout_ms: 20000, max_buffer_bytes: 10000000 } }] };
@@ -301,12 +351,13 @@ export async function collectBatch(input) {
     catch { throw diagnostic('scan-import', 'Core did not return a JSON scan receipt; see scan.log'); }
     atomicJson(resolve(folder, 'scan-receipt.json'), result.scanReceipt);
   }
-  return result;
+  return { result, states };
 }
 
 export function readCache(path) {
   const data = JSON.parse(readFileSync(path, 'utf8'));
-  if (data.contractVersion !== CONTRACT_VERSION || !Array.isArray(data.jobs) || !Array.isArray(data.sourceStatuses)) throw diagnostic('invalid-config', 'Invalid HH cache contract');
+  if (data.contractVersion !== CONTRACT_VERSION) throw diagnostic('invalid-config', `Unsupported HH cache contract version ${data.contractVersion} (expected ${CONTRACT_VERSION}); regenerate the cache`);
+  if (!Array.isArray(data.jobs)) throw diagnostic('invalid-config', 'Invalid HH cache contract');
   const valid = data.jobs.every(j => j.source === 'hh' && typeof j.title === 'string' && /^https:\/\/hh\.ru\/vacancy\/[1-9]\d*$/.test(j.url));
   if (!valid) throw diagnostic('invalid-config', 'Cache contains invalid HH job URLs or metadata');
   return { ...data, jobs: data.jobs.map(sanitizeJob).filter(job => job.title) };
@@ -342,28 +393,30 @@ export async function main(args = process.argv.slice(2), deps = {}) {
     if (options.noArtifacts && (options.scan || options.artifactDir || options.resume || !options.config)) throw diagnostic('invalid-config', '--no-artifacts only combines with --config and no --scan, --artifact-dir or --resume');
     if ([options.query, options.config, options.cache, options.preflight].filter(Boolean).length > 1) throw diagnostic('invalid-config', 'Select one query/config/cache/preflight route');
     const common = { launch: deps.launch, signal: controller.signal };
-    let result;
+    let result, states = [];
     if (options.cache) result = readCache(resolve(getCareerOpsRoot(), options.cache));
-    else if (options.preflight) { const browser = await preflight({ ...options, launch: deps.launch }); await browser.close(); result = envelope([], [], { preflight: 'ok' }); }
+    else if (options.preflight) { const browser = await preflight({ ...options, launch: deps.launch }); await browser.close(); result = envelope([], { preflight: 'ok' }); }
     else if (options.config) {
       const config = await loadBatchConfig(options.config, options.entry);
       if (options.noArtifacts) { temp = mkdtempSync(resolve(tmpdir(), 'hh-run-')); options.artifactDir = temp; }
       const merged = { ...config, ...options, ...common };
       arm(merged.timeoutMs);
-      result = await collectBatch(merged);
+      ({ result, states } = await collectBatch(merged));
       if (temp) delete result.artifactDir;
-    } else result = await searchHh({ ...options, ...common });
+    } else { const run = await searchHh({ ...options, ...common }); result = envelope(run.jobs); states = [run.state]; }
     if (options.output) atomicJson(resolve(getCareerOpsRoot(), options.output), result);
     write(JSON.stringify(result, null, 2) + '\n');
-    // Failures are reported through sourceStatuses with exit 0 so core can import partial jobs; only --scan and configuration errors are nonzero.
-    const failed = result.sourceStatuses.some(s => s.status !== 'ok');
-    return { result, exitCode: (options.scan && failed) || result.sourceStatuses.some(s => s.category === 'invalid-config') ? 1 : 0 };
+    // Partial or blocked collection is reported on stderr and in the artifact files, exit 0, so core still imports the jobs found;
+    // only configuration errors and an incomplete --scan run are nonzero.
+    const failed = states.some(s => s.status !== 'ok');
+    return { result, states, exitCode: (options.scan && failed) || states.some(s => s.category === 'invalid-config') ? 1 : 0 };
   } finally {
     clearTimeout(timer); process.removeListener('SIGINT', abort); process.removeListener('SIGTERM', abort);
     if (temp) rmSync(temp, { recursive: true, force: true });
   }
 }
 if (isMainModule(import.meta.url)) main().then(({ exitCode }) => { process.exitCode = exitCode; }, error => {
-  process.stdout.write(JSON.stringify(envelope([], [{ source: 'hh', transport: 'playwright', status: 'failed', completed_pages: 0, count: 0, ...classify(error) }])) + '\n');
+  console.error(`HH: ${classify(error).category}: ${classify(error).message}`);
+  process.stdout.write(JSON.stringify(envelope([])) + '\n');
   process.exitCode = 1;
 });
