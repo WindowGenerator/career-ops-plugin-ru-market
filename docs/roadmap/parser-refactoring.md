@@ -8,7 +8,7 @@ The branch `refactor/parser-pipeline` made `lib/` readable without changing beha
 
 ## What was done in this branch
 
-- Layout: `lib/providers/` (six sources), `lib/transport/` (`http`, `queue`, `retry`), `lib/processors/` (`paginate`, `normalize`, `compensation`, `dedup`, `page-pipeline`), `lib/helpers/` (`html`). `lib/config.mjs`, `lib/errors.mjs` and `lib/untrusted.mjs` stay at the root; `lib/untrusted.mjs` did not move because `install.sh`, the release workflow and the HH companion use that path and its hash.
+- Layout: `lib/providers/` (six sources), `lib/transport/` (`http`, `queue`, `retry`), `lib/processors/` (`paginate`, `normalize`, `compensation`, `dedup`, `page-pipeline`), `lib/helpers/` (`html`). `lib/config.mjs`, `lib/errors.mjs`, `lib/sources.mjs` (source registry, see [source registry](source-registry.md)) and `lib/untrusted.mjs` stay at the root; `lib/untrusted.mjs` did not move because `install.sh`, the release workflow and the HH companion use that path and its hash.
 - Characterization tests written first on the old behaviour: `test/text.mjs`, `test/html.mjs`, `test/transport.mjs`, `test/processors.mjs`. Existing tests and fixtures are unchanged except for import paths.
 - Page pipeline: the six providers repeated the same tail (map cards with `makeJob`, drop nulls, refuse a page where every item is invalid, deduplicate). It now lives once in `lib/processors/page-pipeline.mjs`, tested in `test/page-pipeline.mjs`. Each provider supplies a small extractor adapter.
 - Readability pass: module header comments, JSDoc on every export, named constants and regexes, early returns instead of nested ternaries, lines under 120 characters (only a few long regex literals remain), no function above 40 lines.

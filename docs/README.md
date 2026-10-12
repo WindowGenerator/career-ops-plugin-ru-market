@@ -17,9 +17,9 @@ Providers: [matrix](providers/README.md), [hh](providers/hh.md), [habr-career](p
 
 Architecture: [components](architecture/components.md), [data flow](architecture/data-flow.md).
 
-Research: [getmatch](research/getmatch.md), [HelloWorld.rs](research/helloworld.md), [Armenia ATS](research/armenia-ats.md), [Yandex Jobs](research/yandex-jobs.md), [HH companion without core patches](research/hh-companion-alternatives.md).
+Research: [getmatch](research/getmatch.md), [HelloWorld.rs](research/helloworld.md), [Armenia ATS](research/armenia-ats.md), [Yandex Jobs](research/yandex-jobs.md), [Poslovi Infostud](research/poslovi-infostud.md), [HH companion without core patches](research/hh-companion-alternatives.md).
 
-Roadmap: [provider architecture review (0.7.0)](roadmap/provider-architecture-review.md), [core job filters](roadmap/core-job-filters.md), [getmatch provider](roadmap/getmatch-provider.md), [HelloWorld.rs provider](roadmap/helloworld-provider.md), [Serbian providers](roadmap/serbia-providers.md), [parser refactoring](roadmap/parser-refactoring.md).
+Roadmap: [provider architecture review (0.7.0)](roadmap/provider-architecture-review.md), [core job filters](roadmap/core-job-filters.md), [getmatch provider](roadmap/getmatch-provider.md), [HelloWorld.rs provider](roadmap/helloworld-provider.md), [Serbian providers](roadmap/serbia-providers.md), [parser refactoring](roadmap/parser-refactoring.md), [source registry](roadmap/source-registry.md), [architecture redesign](roadmap/architecture-redesign.md).
 
 ## Rules
 

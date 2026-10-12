@@ -1,15 +1,26 @@
 import assert from 'node:assert';
 import {
+  ALLOWED_PATHS,
   assertRequestUrl,
   request,
   USER_AGENT,
 } from '../lib/transport/http.mjs';
 import { createQueue, enqueue } from '../lib/transport/queue.mjs';
+import { LISTING_HOSTS } from '../lib/sources.mjs';
 import { retryAfterMs, withRetry } from '../lib/transport/retry.mjs';
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
 const forbidden = e => e.category === 'access';
+
+test('ALLOWED_PATHS: hosts equal the registry listing hosts, and each host has a queue', async () => {
+  assert.deepStrictEqual(
+    Object.keys(ALLOWED_PATHS).sort(),
+    [...LISTING_HOSTS].sort(),
+  );
+  for (const host of LISTING_HOSTS)
+    assert.strictEqual(await enqueue(host, () => 'ok'), 'ok');
+});
 
 test('assertRequestUrl: every public listing endpoint is accepted and returned as a URL', () => {
   for (const url of [

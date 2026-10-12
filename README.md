@@ -12,7 +12,7 @@ Start with the [documentation index](docs/README.md). Categories:
 
 - [Providers](docs/providers/README.md): provider matrix and one page per provider (HH, Habr Career, GeekJob, SuperJob, Trudvsem, getmatch, HelloWorld.rs).
 - [Architecture](docs/architecture/components.md): components and boundaries; [data flow](docs/architecture/data-flow.md).
-- [Research](docs/research/getmatch.md): source studies (getmatch, HelloWorld.rs, Armenia ATS, Yandex Jobs).
+- [Research](docs/research/getmatch.md): source studies (getmatch, HelloWorld.rs, Armenia ATS, Yandex Jobs, Poslovi Infostud).
 - [Roadmap](docs/roadmap/provider-architecture-review.md): plans and decisions, including [core job filters](docs/roadmap/core-job-filters.md) and [Serbian providers](docs/roadmap/serbia-providers.md).
 
 ## Installation

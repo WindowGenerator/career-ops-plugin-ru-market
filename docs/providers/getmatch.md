@@ -31,7 +31,7 @@ job_boards:
           per_page: 20
 ```
 
-Accepted options: `enabled`, `mode`, `max_pages` (1-20), `per_page` (1-100) and the experimental filters below. For `source: all`, explicitly enable getmatch in `sources`; the two default sources remain unchanged. Priority lists containing the two core sources, the four, five or all six sources are accepted; missing optional sources are appended in stable order. Keep the default single page: larger scans/retries may exceed the core hook budget.
+Accepted options: `enabled`, `mode`, `max_pages` (1-20), `per_page` (1-100) and the experimental filters below. For `source: all`, explicitly enable getmatch in `sources`; the two default sources remain unchanged. Priority lists containing the two core sources, or four up to all sources, are accepted; missing optional sources are appended in stable order. Keep the default single page: larger scans/retries may exceed the core hook budget.
 
 Experimental filters `sa`, `pa`, `se`, `l` (UNVERIFIED), opt-in and off by default. The parameter names were inferred from the public client code ([research](../research/getmatch.md)); their values and behaviour were never observed against the live API, and this change made no live request. They may be wrong or unstable. Without these options requests are identical to 0.6.0 (`p`, `offset`, `limit`). With them, only these parameters are added:
 

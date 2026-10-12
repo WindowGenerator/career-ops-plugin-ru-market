@@ -5,6 +5,9 @@ import { pathToFileURL } from 'node:url';
 import { parseConfig } from '../lib/config.mjs';
 import { adapters } from '../index.mjs';
 import { categoryOf } from '../lib/errors.mjs';
+import { SOURCE_IDS } from '../lib/sources.mjs';
+
+const SOURCE_CHOICES = ['all', ...SOURCE_IDS];
 
 export async function checkHealth(ctx, { source = 'all' } = {}) {
   const config = parseConfig({
@@ -46,7 +49,7 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
     console.log(
-      'Usage: node scripts/health.mjs [--career-ops /path/to/career-ops] [--source all|getmatch|helloworld-rs]',
+      `Usage: node scripts/health.mjs [--career-ops /path/to/career-ops] [--source ${SOURCE_CHOICES.join('|')}]`,
     );
     console.log(
       'Separate browser preflight (from career-ops): node scripts/ru-market/scan-hh.mjs --preflight --channel chrome; use --version for tool identity.',
@@ -58,10 +61,7 @@ async function main() {
   for (let i = 0; i < args.length; i += 2) {
     if (!args[i + 1]) throw new Error('Missing health option value');
     if (args[i] === '--career-ops') corePath = args[i + 1];
-    else if (
-      args[i] === '--source' &&
-      ['all', 'getmatch', 'helloworld-rs'].includes(args[i + 1])
-    )
+    else if (args[i] === '--source' && SOURCE_CHOICES.includes(args[i + 1]))
       source = args[i + 1];
     else throw new Error('Invalid health arguments');
   }

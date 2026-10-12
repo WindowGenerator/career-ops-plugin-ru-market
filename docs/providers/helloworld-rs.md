@@ -43,13 +43,12 @@ Not supported: the site's `/python/` route is a technology filter and is not use
 
 Common fields of [all adapters](README.md#common-behaviour), plus:
 
-- Title, employer, original URL (`/posao/<title>/<company>/<id>`), raw location (`locationText`) and work arrangement, explicit salary, `seniority: { levels, rawLabels }` and `skills`.
-- Junior maps to `entry`, Intermediate to `mid`, Senior to `senior`. All explicit labels/tags are kept; unknown labels retain raw text without an invented level. Tags do not become a fabricated description. Missing metadata does not exclude a job.
+- Title, employer, original URL (`/posao/<title>/<company>/<id>`), raw location (`locationText`) and work arrangement, explicit salary. Seniority and technology tags visible on the card are not extracted until core can filter on them.
 - `Rad od kuće` / `Remote` means remote work, not verified eligibility from Serbia. City-only listings retain an unknown work arrangement. `Inostranstvo` (abroad) is not a named city or a verified country restriction. Ambiguous comma-separated places remain one raw place label; the adapter does not infer multiple cities. Unknown geography is retained for later evaluation; there is no country-exclusion guess based on a company, site domain or remote badge.
 - Observed salaries such as `2.600,00 - 2.700,00 EUR (net)` preserve amounts, currency and taxes, but the period remains `unknown`. Unrecognized notation is kept as raw text.
 - No full descriptions, publication dates or complete history are provided: the visible listing date is an expiry date, not `postedAt`. Empty keyword searches show unrelated newest advertisements; these are explicitly excluded.
 
-The direct plugin provider preserves the new optional fields. Existing core filters/display and the companion local-parser do not yet consume or pass through seniority and skills. That work is tracked in [core-job-filters](../roadmap/core-job-filters.md) and does not block this adapter.
+Seniority and skills were removed from the output until core can use them; the plan stays in [core-job-filters](../roadmap/core-job-filters.md).
 
 ## Limits
 

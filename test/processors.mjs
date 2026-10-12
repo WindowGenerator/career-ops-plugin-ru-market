@@ -28,6 +28,7 @@ const job = (source, id, extra = {}) => ({
       ? `https://getmatch.ru/vacancies/${id}-python`
       : `https://example.test/${source}/${id}`,
   description: words(20),
+  source,
   note: `source: ${source}`,
   ...extra,
 });
@@ -397,12 +398,9 @@ test('formatExplicitCompensation: ranges, open bounds, equal bounds and raw text
 
 // --- dedup ----------------------------------------------------------------
 
-test('sourceOf: reads the source id from the note, empty when absent', () => {
-  assert.strictEqual(
-    sourceOf({ note: 'source: habr-career; salary: x' }),
-    'habr-career',
-  );
-  assert.strictEqual(sourceOf({ note: 'other' }), '');
+test('sourceOf: reads job.source, empty when absent, ignores the note', () => {
+  assert.strictEqual(sourceOf({ source: 'habr-career' }), 'habr-career');
+  assert.strictEqual(sourceOf({ note: 'source: habr-career' }), '');
   assert.strictEqual(sourceOf({}), '');
 });
 

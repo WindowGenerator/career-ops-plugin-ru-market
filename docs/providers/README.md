@@ -18,13 +18,13 @@ One page per provider, plus the provider matrix below. The matrix describes the 
 | getmatch | Undocumented JSON `getmatch.ru/api/offers` | None | Experimental (0.4.0); usage terms and live pagination unverified | No | [getmatch](getmatch.md) |
 | HelloWorld.rs | Public HTML listing (Serbia) | None | Implemented (0.6.0); source terms restrict automated use | No | [helloworld-rs](helloworld-rs.md) |
 
-Source selection and order are validated in `lib/config.mjs`: `ru_market.source` is `all` or one source id; `primary_source_order` must contain the two core sources (`habr-career`, `geekjob`), the four, five or all six sources, exactly once (lengths 2, 4, 5, 6 since 0.7.0). Missing optional sources are appended in stable order.
+Source selection and order are validated in `lib/config.mjs`: `ru_market.source` is `all` or one source id; `primary_source_order` must contain the two core sources (`habr-career`, `geekjob`), or four up to all sources, exactly once (lengths 2, 4, 5, 6 today, derived from the registry). Missing optional sources are appended in stable order. Source ids, config keys, transport, hosts, labels and request spacing are defined once in `lib/sources.mjs`; a test checks that `manifest.json` `allowedHosts` match it.
 
 ## Common behaviour
 
 - Request guard: `lib/transport/http.mjs` allows only HTTPS listing endpoints per host (no credentials, no ports). Timeout 10 s per request, up to two retries for `network`, `server` and `rate-limited` errors (`lib/transport/retry.mjs`); access errors are not retried.
-- Request queue: one request at a time per host. Spacing is 750 ms for Habr Career, GeekJob, SuperJob and Trudvsem, and 1000 ms for HelloWorld.rs and getmatch (`lib/transport/queue.mjs`). These are internal conservative settings, not published limits of the sources.
-- Output fields shared by all `ru-market` adapters (built by `makeJob` in `lib/processors/normalize.mjs`): `title`, `url` (canonical, tracking parameters removed), `company`, `location`, `note` (`source: <id>`, plus salary text), `source`, `transport`, `sourceId`, `locationText`, `locations`, `workArrangement`, `eligibility: {status: unknown}`, `dataLevel: listing`, `hasDescription`, `matchedQueries`, and when present `description`, `postedAt`, `salary` (`{min, max, currency}`), `compensation`, `skills`, `seniority`, `employment`, `professional_role`, `injectionFlags`. A job without a title or a valid canonical URL is dropped.
+- Request queue: one request at a time per host. Spacing is 750 ms for Habr Career, GeekJob, SuperJob and Trudvsem, and 1000 ms for HelloWorld.rs and getmatch (`spacingMs` in `lib/sources.mjs`, applied by `lib/transport/queue.mjs`). These are internal conservative settings, not published limits of the sources.
+- Output fields shared by all `ru-market` adapters (built by `makeJob` in `lib/processors/normalize.mjs`): `title`, `url` (canonical, tracking parameters removed), `company`, `location`, `note` (`source: <id>`, plus salary text), `source`, `transport`, `sourceId`, `locationText`, `locations`, `workArrangement`, `eligibility: {status: unknown}`, `dataLevel: listing`, `hasDescription`, `matchedQueries`, and when present `description`, `postedAt`, `salary` (`{min, max, currency}`), `compensation`, `injectionFlags`. A job without a title or a valid canonical URL is dropped.
 - Untrusted text: all source text passes through `lib/untrusted.mjs`; instruction-like patterns produce `injectionFlags`, flagged jobs are kept.
 - Code layout: one module per source in `lib/providers/`, each supplying an extractor adapter to `parsePage` in `lib/processors/page-pipeline.mjs`; see [components](../architecture/components.md).
 - Failures: a failure of one source does not stop the others (it is logged with safe request coordinates and the jobs already received are kept); failure of all sources is an error. No status object is attached to the result since 0.8.0, and core has no channel for one.
@@ -56,7 +56,7 @@ The column "Source offers" for HH was filled from the list given in the revision
 | superjob | Not checked | `keyword` | Same |
 | trudvsem | Not checked | `text` | Same |
 | getmatch | Parameters `sa`, `pa`, `se`, `l`, `s`, `from_date`, `to_date`, `sp`, `pl`, `c`, `exclude_applied` inferred from client code ([research](../research/getmatch.md)). UNVERIFIED: values and behaviour were not observed | Nothing by default; opt-in `sa`, `pa`, `se`, `l` | Same, only on the loaded pages |
-| helloworld-rs | Not checked | `q` | Same; `seniority` and `skills` are returned but not filtered ([core-job-filters](../roadmap/core-job-filters.md)) |
+| helloworld-rs | Not checked | `q` | Same |
 
 ## Related
 
