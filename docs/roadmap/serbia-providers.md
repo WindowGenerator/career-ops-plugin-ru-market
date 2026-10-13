@@ -14,7 +14,7 @@ Add Serbian job boards to the existing `ru-market` plugin, keeping its `id`, the
 
 | Queue | Source | First check |
 | --- | --- | --- |
-| 1 | [Poslovi Infostud](https://poslovi.infostud.com/rss) | Official RSS, the last 20 vacancies and links to cards |
+| 1 | [Poslovi Infostud](https://poslovi.infostud.com/oglasi-za-posao) | Public HTML IT listing (`?categories=5`); the official RSS has no IT items, see [research](../research/poslovi-infostud.md) |
 | 2 | [HelloWorld.rs](https://www.helloworld.rs/oglasi-za-posao) | IT search, filters, pagination and permanent links |
 | 3 | [Poslovi.rs](https://www.poslovi.rs/jobs/categories) | Current IT category, listing volume and cards without login |
 
@@ -25,10 +25,10 @@ For each source, assess separately the technical availability of public vacancie
 | Source | Status | Basis and next step |
 | --- | --- | --- |
 | HelloWorld.rs | Technical candidate, explicit terms conflict | The [public Python listing](https://www.helloworld.rs/oglasi-za-posao/python/stranica/0) shows dozens of IT vacancies and pages without login. The [terms](https://helloworld.rs/uslovi-koriscenja) prohibit automated use of the system and restrict passing on content. Check a stable path, pagination and cards; the plan covers only short fields and a link, with an explicit note that compliance with the terms is not confirmed. |
-| Poslovi Infostud | First candidate via official RSS | The [official RSS page](https://poslovi.infostud.com/rss) permits automatically obtaining vacancies and contains a link to the last 20 listings. For **placing the RSS on a site** the same page states a restriction: do not combine vacancies of other platforms without agreement. The [general terms](https://nalog.infostud.com/privatnost-uslovi) restrict automated use of the site and passing on content. Check the feed format and suitability for personal search without public republication; assess HTML search separately. |
+| Poslovi Infostud | Technical candidate via public HTML; RSS not useful | Live check of 2026-10-11 ([research](../research/poslovi-infostud.md)): the RSS `https://rss.infostud.com/poslovi/rss.php` has 20 items across all categories (none IT) with only title, link, "Company - City", guid and date, and no per-category feed. The server-rendered HTML listing carries IT filtering (`?categories=5`, `?q=`), pagination, salary text and technology tags in `__NEXT_DATA__`. `robots.txt` does not disallow `/oglasi-za-posao` or `/posao/`. Terms: the footer forbids downloading content without permission "except for personal needs of site visitors"; no clause explicitly allows or forbids automated personal reading, so permission is not confirmed. For **placing the RSS on a site** the RSS page restricts combining other platforms' vacancies. |
 | Poslovi.rs | Technical candidate, low value for IT | The [general listing](https://www.poslovi.rs/jobs) and the [category list](https://www.poslovi.rs/jobs/categories) are publicly available; the IT category had only 3 vacancies at the time of the check. The [published terms](https://www.poslovi.rs/uslovi-i-pravila-koriscenja) are addressed to employers, so they do not confirm permission for automated collection of the candidate-facing listing. The old `/kategorija/it` showed a JS stub. Check the current IT category path, cards and suitability of HTML; do not treat page availability as the platform's consent. |
 
-Checking `robots.txt` of the three Serbian sites through the available tools failed; the crawl status of specific paths remains unknown. Until the route is technically checked, Serbian hosts are not added to `allowedHosts`, and the configuration example below stays only a draft. The nearest check is the Poslovi Infostud RSS, then the public IT listing of HelloWorld.
+Checking `robots.txt` of the three Serbian sites through the available tools failed; the crawl status of specific paths remains unknown. Until the route is technically checked, Serbian hosts are not added to `allowedHosts`, and the configuration example below stays only a draft. `robots.txt` of poslovi.infostud.com was checked on 2026-10-11 (see above); the other two sites are still unchecked. The nearest step is a bounded adapter for the Poslovi Infostud HTML IT listing.
 
 ## Decisions
 
@@ -89,7 +89,18 @@ The product decisions Q1-Q8 are recorded; the technical shape of the lists is pr
 
 ## Scope
 
-### Poslovi Infostud RSS adapter plan
+### Poslovi Infostud adapter plan (revised 2026-10-12: HTML instead of RSS)
+
+The RSS plan below was written before the live check and is superseded for the IT search: the feed has no IT items. The checklist is kept; items about the RSS transport are replaced by the HTML tasks first listed here.
+
+- [ ] Optionally ask poslovi@infostud.com whether low-rate personal automated reading is acceptable before release (not contacted yet).
+- [ ] Build an opt-in HTML adapter reading `__NEXT_DATA__` from `/oglasi-za-posao?categories=5` (`?q=`, `?page=N`, 30 ads per page); bound pages and requests; fixtures for ordinary, empty, damaged and changed-JSON responses.
+- [ ] Add `poslovi.infostud.com` to `manifest.json`, `lib/transport/http.mjs` and `lib/transport/queue.mjs`; avoid paths disallowed in `robots.txt` (`/search/*`, `/?*`).
+- [ ] Resolve the date mismatch (`onlineViewDate` in the listing vs `datePosted` on the detail page) before choosing `postedAt`.
+- [ ] Test city and salary filter syntax (not tested in the research); deduplicate against HelloWorld.rs.
+
+RSS-based items (kept for reference):
+
 
 - [ ] Check the live feed `https://rss.infostud.com/poslovi/`: availability, XML structure and the presence of the last 20 vacancies. The previous prototype was checked only on fixtures; a live request from the development environment could not be made.
 - [ ] Create `lib/infostud.mjs` with an RSS parser and the `fetchInfostud` adapter, register the `infostud` source in `index.mjs`.
@@ -108,12 +119,12 @@ The product decisions Q1-Q8 are recorded; the technical shape of the lists is pr
 1. For each source add fixtures and checks for an ordinary and an empty listing, pagination, a damaged response, access denial, canonical links and optional fields.
 2. Then run one bounded live request, `npm test`, an integration `scan --dry-run` and the plugin audit.
 3. Check separately the HelloWorld and Infostud deduplication and that the behaviour of existing RU configurations is unchanged.
-4. Release a separate version with the first technically confirmed source, keeping the restrictions of its terms of use in the documentation. First check the official Poslovi Infostud RSS, then HelloWorld.rs HTML; for HTML record the conflict with the platform terms separately.
+4. Release a separate version with the first technically confirmed source, keeping the restrictions of its terms of use in the documentation. First the Poslovi Infostud HTML IT listing (the RSS has no IT items), then HelloWorld.rs HTML; record the terms position of each platform separately.
 5. README and the `portals.yml` example show only really working sources, and monitoring checks enabled sources one page at a time without saving vacancies.
 
 ## Open decisions
 
 - Final names of search and filter fields for the Serbian sources (after checking the platforms).
-- Crawl status of the specific paths: `robots.txt` of the three sites could not be checked.
-- Whether the explicit terms conflicts (HelloWorld.rs, Poslovi Infostud general terms) allow even a personal-search adapter.
+- Crawl status of the specific paths: Poslovi Infostud `robots.txt` was checked on 2026-10-11; HelloWorld.rs and Poslovi.rs are still unchecked.
+- Whether the terms of HelloWorld.rs and Poslovi Infostud allow even a personal-search adapter (Poslovi Infostud: no explicit rule on automated personal reading, permission unconfirmed).
 - Whether Poslovi.rs has enough IT vacancies to be worth an adapter.

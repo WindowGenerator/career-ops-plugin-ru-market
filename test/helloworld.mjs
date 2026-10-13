@@ -43,16 +43,10 @@ test('observed cards: fields, unknown geography, multiple levels, no expiry publ
   assert.equal(jobs[0].locationText, 'Beograd | Hibrid');
   assert.deepEqual(jobs[0].locations, ['Beograd']);
   assert.equal(jobs[0].workArrangement, 'hybrid');
-  assert.deepEqual(jobs[0].seniority, {
-    levels: ['senior'],
-    rawLabels: ['Senior'],
-  });
-  assert.deepEqual(jobs[0].skills, ['SQL', 'Python', 'Batch', 'Kubernetes']);
   assert.equal(jobs[1].workArrangement, 'unknown');
   assert.equal(jobs[2].workArrangement, 'remote');
   assert.deepEqual(jobs[2].locations, []);
   assert.deepEqual(jobs[2].eligibility, { status: 'unknown' });
-  assert.deepEqual(jobs[3].seniority.levels, ['mid', 'senior']);
   assert.deepEqual(jobs[3].locations, []);
   for (const job of jobs) {
     assert.equal(job.postedAt, undefined);
@@ -61,37 +55,12 @@ test('observed cards: fields, unknown geography, multiple levels, no expiry publ
     assert.equal(job.dataLevel, 'listing');
   }
 });
-test('synthetic metadata variants: unknown/missing labels, duplicate skills, ambiguous city', () => {
+test('synthetic variants: ambiguous city, remote without eligibility', () => {
   const last = fixture('last');
   assert.equal(parse(last.replace('(96 oglasa)', '(1 oglas)')).jobs.length, 1);
-  const unknown = parse(last.replace(/Senior/g, 'Principal')).jobs[0];
-  assert.deepEqual(unknown.seniority, { levels: [], rawLabels: ['Principal'] });
-  const repeated = parse(
-    last
-      .replace(
-        '</button>',
-        '</button><button class="__ga4_job_seniority">Senior</button>',
-      )
-      .replace(
-        '</div>\n',
-        '<a class="jobtag">Python</a><a class="jobtag">Python</a></div>\n',
-      ),
-  ).jobs[0];
-  assert.deepEqual(repeated.seniority.levels, ['senior']);
-  assert.equal(repeated.skills.filter(x => x === 'Python').length, 1);
-  const missing = parse(
-    last
-      .replace(/<button[^]*?<\/button>/g, '')
-      .replace(/<a[^>]*class="[^"]*jobtag[^]*?<\/a>/g, ''),
-  ).jobs[0];
-  assert.equal(missing.seniority, undefined);
-  assert.equal(missing.skills, undefined);
   const synthetic = parse(
-    last
-      .replace('>Remote<', '>Beograd, Novi Sad | Hibrid<')
-      .replace('Senior', 'Junior'),
+    last.replace('>Remote<', '>Beograd, Novi Sad | Hibrid<'),
   ).jobs[0];
-  assert.deepEqual(synthetic.seniority.levels, ['entry']);
   assert.deepEqual(synthetic.locations, ['Beograd, Novi Sad']);
   const remote = parse(
     last.replace('Inostranstvo, Inostranstvo | Rad od kuće', 'Remote'),
@@ -240,8 +209,6 @@ test('pagination, direct plugin contract, query union and page-limit diagnostic'
   assert.equal(requests.length, 4);
   assert.equal(jobs.length, 5);
   assert.equal(jobs[0].matchedQueries.length, 2);
-  assert.deepEqual(jobs[0].seniority.levels, ['senior']);
-  assert(jobs[0].skills.includes('Python'));
   assert(
     !('sourceStatuses' in jobs) &&
       !('sourceStatus' in jobs) &&

@@ -44,7 +44,6 @@ Common fields of [all adapters](README.md#common-behaviour), plus:
 - `description` from `duty`, `requirements` and `qualification` joined.
 - `postedAt` from `creation-date`.
 - `salary` and `compensation` from `salary_min`/`salary_max`, only for rouble amounts.
-- `employment` from `employment` and `professional_role` from `category.specialisation` (explicit source labels only; the API field names have not been verified against live responses; unknown otherwise).
 
 ## Limits
 
@@ -55,7 +54,6 @@ Common fields of [all adapters](README.md#common-behaviour), plus:
 ## Known issues
 
 - Before 0.3.1 a second page with `limit=100` sent `offset=100` and received HTTP 500; fixed by treating `offset` as a page number.
-- The API field names for `employment` and `professional_role` are unverified.
 
 ## Verification
 

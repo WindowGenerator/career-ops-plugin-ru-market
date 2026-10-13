@@ -44,7 +44,6 @@ Common fields of [all adapters](README.md#common-behaviour), plus:
 - `description` from `work`, `candidat` and `compensation` joined.
 - `postedAt` from `date_published` (epoch seconds), when valid.
 - `salary` and `compensation` from `payment_from`/`payment_to` for the currencies RUB, USD, EUR, KZT, BYN, unless the salary is by agreement.
-- `employment` from `type_of_work` and `professional_role` from `catalogues` (explicit source labels only; the API field names have not been verified against live responses; unknown otherwise).
 
 ## Limits
 

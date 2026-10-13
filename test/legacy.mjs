@@ -10,11 +10,14 @@ import { parseSuperjob } from '../lib/providers/superjob.mjs';
 import { parseTrudvsem } from '../lib/providers/trudvsem.mjs';
 import { SourceError } from '../lib/errors.mjs';
 
+const HABR_URL = 'https://career.habr.com/vacancies';
+const GEEK_URL = 'https://geekjob.ru/vacancies/';
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
 const job = id => ({
   title: `Job ${id}`,
   url: `https://example.test/${id}`,
+  source: 'habr-career',
   note: 'source: habr-career',
 });
 const silent = { log() {} };
@@ -114,16 +117,17 @@ test('legacy: index.mjs calls adapters with (config, ctx) only, so fetch options
 test('legacy: habr seniority chips are removed from the location by hard-coded English labels', () => {
   const chip = text => `<span class="chip-with-icon__text">${text}</span>`;
   const chips = ['Senior', 'Москва', 'Lead', 'Москва'].map(chip).join('');
-  const [parsed] = parseHabr(habrPage(habrCard({ chips }))).jobs;
+  const [parsed] = parseHabr(habrPage(habrCard({ chips })), HABR_URL).jobs;
   assert.strictEqual(parsed.location, 'Москва');
 });
 
 test('legacy: habr drops the date of a card whose date text says "updated"', () => {
   const dated = '<time datetime="2026-09-25T10:30:00+03:00">25 сентября</time>';
-  const [fresh] = parseHabr(habrPage(habrCard({ date: dated }))).jobs;
+  const [fresh] = parseHabr(habrPage(habrCard({ date: dated })), HABR_URL).jobs;
   assert.strictEqual(fresh.postedAt, Date.parse('2026-09-25T10:30:00+03:00'));
   const [updated] = parseHabr(
     habrPage(habrCard({ date: `обновлено ${dated}` })),
+    HABR_URL,
   ).jobs;
   assert.strictEqual('postedAt' in updated, false);
 });
@@ -174,11 +178,12 @@ test('legacy: geekjob uses a card date only when it carries an explicit publicat
     <a class="title" href="/vacancy/${'a'.repeat(24)}">Dev</a>${time}</li></ul></body></html>`;
   const plain = parseGeekjob(
     page('<time datetime="2026-09-25">25 сентября</time>'),
+    GEEK_URL,
   ).jobs[0];
   assert.strictEqual('postedAt' in plain, false);
   const labelled =
     '<time itemprop="datePosted" datetime="2026-09-25">25 сентября</time>';
-  const posted = parseGeekjob(page(labelled)).jobs[0];
+  const posted = parseGeekjob(page(labelled), GEEK_URL).jobs[0];
   assert.strictEqual(posted.postedAt, Date.parse('2026-09-25T00:00:00+03:00'));
 });
 

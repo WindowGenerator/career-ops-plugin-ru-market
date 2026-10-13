@@ -26,7 +26,12 @@ const fixture = (source, name = 'normal') =>
     new URL(`../fixtures/${source}/${name}.html`, import.meta.url),
     'utf8',
   );
-const parsers = { 'habr-career': parseHabr, geekjob: parseGeekjob };
+const HABR_URL = 'https://career.habr.com/vacancies';
+const GEEK_URL = 'https://geekjob.ru/vacancies/';
+const parsers = {
+  'habr-career': html => parseHabr(html, HABR_URL),
+  geekjob: html => parseGeekjob(html, GEEK_URL),
+};
 const parse = (source, name) => parsers[source](fixture(source, name));
 const config = (source, max_pages = 2) =>
   parseConfig({ ru_market: { source, max_pages } }).sources[source];
@@ -336,6 +341,7 @@ test('localized date validation, timezone, year rollover; unknown dates omitted'
     fixture('geekjob')
       .replace('itemprop="datePosted"', '')
       .replace('Опубликовано ', ''),
+    GEEK_URL,
   );
   assert(!('postedAt' in geek.jobs[0]));
   const habr = parseHabr(
@@ -343,6 +349,7 @@ test('localized date validation, timezone, year rollover; unknown dates omitted'
       '>25 сентября</time>',
       '>Обновлено 25 сентября</time>',
     ),
+    HABR_URL,
   );
   assert(!('postedAt' in habr.jobs[0]));
 });
@@ -365,7 +372,7 @@ test('salary variants and predicted salary', () => {
     'class="basic-salary"',
     'class="predicted-salary"',
   );
-  const predicted = parseHabr(text).jobs[0];
+  const predicted = parseHabr(text, HABR_URL).jobs[0];
   assert.strictEqual(predicted.salary, undefined);
   assert(!predicted.note.includes('salary:'));
 });
@@ -379,7 +386,7 @@ test('Habr company rating and market salary do not enter job data', () => {
       '<div class="basic-salary">от 250 000 до 350 000 ₽ на руки в месяц</div>',
       '<div class="predicted-salary">Зарплата не указана <span>Похожие специалисты получают 250 000 – 350 000 ₽</span></div>',
     );
-  const job = parseHabr(text).jobs[0];
+  const job = parseHabr(text, HABR_URL).jobs[0];
   assert.strictEqual(job.company, 'Тестовая компания');
   assert.strictEqual(job.salary, undefined);
   assert.strictEqual(job.note, 'source: habr-career');
@@ -822,41 +829,6 @@ test('Работа России partial server error reports safe request coordi
     },
   ]);
   assert(!JSON.stringify(logs).includes('private search text'));
-});
-test('employment and professional_role are explicit source labels, unknown otherwise', () => {
-  const sj = superjobPage();
-  Object.assign(sj.objects[0], {
-    type_of_work: { id: 6, title: 'Полная занятость' },
-    catalogues: [{ id: 33, title: 'Информационные технологии' }, { title: '' }],
-  });
-  const [job] = parseSuperjob(sj).jobs;
-  assert.deepStrictEqual(job.employment, {
-    values: ['full'],
-    rawLabels: ['Полная занятость'],
-  });
-  assert.deepStrictEqual(job.professional_role, {
-    values: [],
-    rawLabels: ['Информационные технологии'],
-  });
-  const tv = trudvsemPage();
-  Object.assign(tv.results.vacancies[0].vacancy, {
-    employment: 'Проектная работа',
-    category: { specialisation: 'Образование' },
-  });
-  const [work] = parseTrudvsem(tv).jobs;
-  assert.deepStrictEqual(work.employment, {
-    values: ['project'],
-    rawLabels: ['Проектная работа'],
-  });
-  assert.deepStrictEqual(work.professional_role.rawLabels, ['Образование']);
-  for (const unknown of [
-    parseSuperjob(superjobPage()).jobs[0],
-    parseTrudvsem(trudvsemPage()).jobs[0],
-    parse('habr-career').jobs[0],
-    parse('geekjob').jobs[0],
-  ]) {
-    assert(!('employment' in unknown) && !('professional_role' in unknown));
-  }
 });
 test('new sources enforce listing and vacancy URL boundaries', () => {
   for (const url of [

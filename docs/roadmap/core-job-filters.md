@@ -4,7 +4,7 @@ Status: Planned
 Date: 2026-10-11
 Type: roadmap
 
-Planned separately from the first release of the HelloWorld.rs adapter. Decisions were agreed on 2026-10-09; core filters are not implemented. In 0.7.0 the plugin and the combined patch passed `employment` and `professional_role` through local-parser; since 0.8.0 there is no patch and the fields reach core through upstream `local-parser` pass-through (PR #4697). Settings for allowed and excluded values in core remain undone. The upstream `field_filters` and `filter_on` (PR #3438) read only own scalar properties, so object-shaped `employment` and `professional_role` are not readable by them (unverified for HH semantics; see [hh-companion-alternatives](../research/hh-companion-alternatives.md)).
+Planned separately from the first release of the HelloWorld.rs adapter. Decisions were agreed on 2026-10-09; core filters are not implemented. Update 2026-10-12: the plugin no longer emits `skills`, `seniority`, `employment` or `professional_role`; they were removed as unused groundwork and are to be added back, with the shapes described below, when core can consume them. In 0.7.0 the plugin and the combined patch passed `employment` and `professional_role` through local-parser; since 0.8.0 there is no patch and the fields reach core through upstream `local-parser` pass-through (PR #4697). Settings for allowed and excluded values in core remain undone. The upstream `field_filters` and `filter_on` (PR #3438) read only own scalar properties, so object-shaped `employment` and `professional_role` are not readable by them (unverified for HH semantics; see [hh-companion-alternatives](../research/hh-companion-alternatives.md)).
 
 ## Problem
 

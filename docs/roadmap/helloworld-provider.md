@@ -10,7 +10,7 @@ Shipped as an optional source in 0.6.0 (see [RELEASE_NOTES.md](../../RELEASE_NOT
 
 An optional HelloWorld.rs source in the existing `provider: ru-market`: search by configurable phrases, reading the HTML listing, normalized vacancies and merging of query results. Serbian vacancies, remote work explicitly available from Serbia and records with undetermined geography are kept. Explicitly incompatible restrictions are taken into account only when data exists, not by the site's domain or the word Remote.
 
-The first version does not load full descriptions and does not need a browser. Shared seniority and technology filters in core are a [separate roadmap stage](core-job-filters.md) that does not block the adapter release. The current rank adds scores and explanations but does not itself exclude records.
+Update 2026-10-12: the `seniority` and `skills` output described below was removed from the adapter until core can filter on it; the data contract here is the plan for adding it back. The first version does not load full descriptions and does not need a browser. Shared seniority and technology filters in core are a [separate roadmap stage](core-job-filters.md) that does not block the adapter release. The current rank adds scores and explanations but does not itself exclude records.
 
 ## Decisions
 
