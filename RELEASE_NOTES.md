@@ -2,6 +2,10 @@
 
 Principle: nothing changes career-ops core behaviour. The plugin and the companion work with stock upstream career-ops that contains upstream PR #4697 (`local-parser` passes a parser's extra job fields through, merged 2026-10-03); CI pins one such commit.
 
+Release health check (2026-10-15): Habr Career and GeekJob both returned network
+errors from the release environment. Live availability remains unverified;
+these results do not establish a parser failure or an access restriction.
+
 Breaking changes:
 
 - Core patches removed. `companion/core-contract.patch`, `core-contract-0.6.patch` and `local-parser.patch` are deleted and no longer attached to releases; `install.sh` never applies, reverses or migrates a patch and never touches core. A core already patched by 0.6.x or 0.7.x installers keeps the patch; to remove it use your own `git apply --reverse` with the patch from the old release, or reset the core files (`providers/local-parser.mjs`, `providers/_trust-validator.mjs`, `providers/_types.js`, `providers/_compensation.mjs`, `scan.mjs`).
